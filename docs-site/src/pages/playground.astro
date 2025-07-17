@@ -1,0 +1,615 @@
+---
+// Astro component for FHIRPath Playground
+---
+
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether FHIRPath - Playground</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header styles */
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+
+        .version-info {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Main content */
+        main {
+            flex: 1;
+        }
+
+        .demo-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 30px;
+        }
+
+        .input-section {
+            grid-column: 1 / -1;
+        }
+
+        .expression-section {
+            grid-column: 1 / 2;
+        }
+
+        .result-section {
+            grid-column: 2 / 3;
+        }
+
+        /* Section headers */
+        h2 {
+            color: #4a5568;
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
+        }
+
+        h3 {
+            color: #4a5568;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        /* Form elements */
+        textarea, input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+            resize: vertical;
+        }
+
+        textarea {
+            height: 200px;
+            line-height: 1.4;
+        }
+
+        textarea:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        /* Expression input container */
+        .expression-input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .expression-input-container input {
+            flex: 1;
+        }
+
+        /* Buttons */
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #evaluate-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        #evaluate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #validate-btn {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+
+        #validate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.4);
+        }
+
+        /* Example buttons */
+        .example-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .example-btn {
+            background: #f7fafc;
+            color: #4a5568;
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            text-transform: none;
+            letter-spacing: normal;
+        }
+
+        .example-btn:hover {
+            background: #edf2f7;
+            border-color: #cbd5e0;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Result section */
+        #result-container {
+            position: relative;
+        }
+
+        #result-output {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 2px solid #2d3748;
+        }
+
+        #result-output.success {
+            border-color: #48bb78;
+        }
+
+        #result-output.error {
+            border-color: #f56565;
+            color: #fed7d7;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: white;
+            opacity: 0.8;
+        }
+
+        footer a {
+            color: white;
+            text-decoration: underline;
+        }
+
+        footer a:hover {
+            opacity: 0.8;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .demo-section {
+                grid-template-columns: 1fr;
+                padding: 20px;
+            }
+
+            .expression-section,
+            .result-section {
+                grid-column: 1 / -1;
+            }
+
+            .expression-input-container {
+                flex-direction: column;
+            }
+
+            .example-buttons {
+                justify-content: center;
+            }
+
+            header h1 {
+                font-size: 2rem;
+            }
+
+            textarea {
+                height: 150px;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .demo-section {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        /* Scrollbar styling */
+        #result-output::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #result-output::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+
+        #result-output::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 4px;
+        }
+
+        #result-output::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>🔥 Aether FHIRPath Playground</h1>
+        <p>Interactive FHIRPath expression evaluation powered by WebAssembly</p>
+        <div class="version-info">
+            <span id="version-info">Loading version...</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="demo-section">
+            <div class="input-section">
+                <h2>FHIR Resource (JSON)</h2>
+                <textarea id="resource-input" placeholder="Enter your FHIR resource JSON here..."></textarea>
+            </div>
+
+            <div class="expression-section">
+                <h2>FHIRPath Expression</h2>
+                <div class="expression-input-container">
+                    <input type="text" id="expression-input" placeholder="Enter FHIRPath expression..."
+                           value="Patient.name.given">
+                    <button id="evaluate-btn">Evaluate</button>
+                    <button id="validate-btn">Validate</button>
+                </div>
+                <div class="quick-examples">
+                    <h3>Quick Examples:</h3>
+                    <div class="example-buttons">
+                        <button class="example-btn" data-expression="Patient.name.given">Patient.name.given</button>
+                        <button class="example-btn" data-expression="Patient.name.family">Patient.name.family</button>
+                        <button class="example-btn" data-expression="Patient.gender">Patient.gender</button>
+                        <button class="example-btn" data-expression="Patient.birthDate">Patient.birthDate</button>
+                        <button class="example-btn" data-expression="Patient.address.city">Patient.address.city</button>
+                        <button class="example-btn" data-expression="Patient.telecom.where(system='phone').value">
+                            Patient.telecom.where(system='phone').value
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="result-section">
+                <h2>Result</h2>
+                <div id="result-container">
+                    <div id="loading" class="hidden">Evaluating...</div>
+                    <pre id="result-output">Click "Evaluate" to see results here</pre>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>
+            Built with <a href="https://github.com/octoshikari/aether-fhirpath" target="_blank">Aether FHIRPath</a> -
+            A high-performance FHIRPath implementation in Rust with WebAssembly bindings
+        </p>
+    </footer>
+</div>
+
+<script type="module">
+    import init, {
+        evaluate_fhirpath,
+        validate_fhirpath,
+        get_fhirpath_version
+    } from '/pkg/fhirpath_wasm.js';
+
+    class FHIRPathDemo {
+        constructor() {
+            this.wasmModule = null;
+            this.isInitialized = false;
+        }
+
+        async init() {
+            try {
+                // Initialize the WASM module
+                this.wasmModule = await init();
+                this.isInitialized = true;
+
+                // Set default JSON content
+                this.setDefaultContent();
+
+                // Update version info
+                this.updateVersionInfo();
+
+                // Set up event listeners
+                this.setupEventListeners();
+
+                console.log('FHIRPath WASM module initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize WASM module:', error);
+                this.showError('Failed to initialize FHIRPath engine. Please refresh the page.');
+            }
+        }
+
+        setDefaultContent() {
+            const defaultJson = `{
+  "resourceType": "Patient",
+  "id": "example",
+  "name": [
+    {
+      "given": ["John", "Q"],
+      "family": "Doe"
+    }
+  ],
+  "gender": "male",
+  "birthDate": "1974-12-25",
+  "address": [
+    {
+      "line": ["534 Erewhon St"],
+      "city": "PleasantVille",
+      "state": "Vic",
+      "postalCode": "3999"
+    }
+  ],
+  "telecom": [
+    {
+      "system": "phone",
+      "value": "555-1234",
+      "use": "home"
+    }
+  ]
+}`;
+            document.getElementById('resource-input').value = defaultJson;
+        }
+
+        updateVersionInfo() {
+            try {
+                const version = get_fhirpath_version();
+                const versionElement = document.getElementById('version-info');
+                versionElement.textContent = `FHIRPath Spec Version: ${version}`;
+            } catch (error) {
+                console.error('Failed to get version info:', error);
+            }
+        }
+
+        setupEventListeners() {
+            // Evaluate button
+            const evaluateBtn = document.getElementById('evaluate-btn');
+            evaluateBtn.addEventListener('click', () => this.evaluateExpression());
+
+            // Validate button
+            const validateBtn = document.getElementById('validate-btn');
+            validateBtn.addEventListener('click', () => this.validateExpression());
+
+            // Example buttons
+            const exampleButtons = document.querySelectorAll('.example-btn');
+            exampleButtons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const expression = e.target.getAttribute('data-expression');
+                    document.getElementById('expression-input').value = expression;
+                    this.evaluateExpression();
+                });
+            });
+
+            // Enter key support for expression input
+            const expressionInput = document.getElementById('expression-input');
+            expressionInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.evaluateExpression();
+                }
+            });
+
+            // Auto-resize textarea
+            const resourceInput = document.getElementById('resource-input');
+            resourceInput.addEventListener('input', this.autoResizeTextarea);
+        }
+
+        autoResizeTextarea(e) {
+            const textarea = e.target;
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 400) + 'px';
+        }
+
+        async evaluateExpression() {
+            if (!this.isInitialized) {
+                this.showError('WASM module not initialized yet. Please wait...');
+                return;
+            }
+
+            const expression = document.getElementById('expression-input').value.trim();
+            const resourceJson = document.getElementById('resource-input').value.trim();
+
+            if (!expression) {
+                this.showError('Please enter a FHIRPath expression');
+                return;
+            }
+
+            if (!resourceJson) {
+                this.showError('Please enter a FHIR resource JSON');
+                return;
+            }
+
+            this.showLoading(true);
+
+            try {
+                // Validate JSON first
+                JSON.parse(resourceJson);
+
+                // Evaluate the expression
+                const result = evaluate_fhirpath(expression, resourceJson);
+
+                if (result === 'null') {
+                    this.showResult("null", 'success');
+                } else {
+                    const parsedResult = JSON.parse(result);
+                    if (parsedResult.error) {
+                        this.showError(`Evaluation Error: ${parsedResult.error}`);
+                    } else {
+                        this.showResult(JSON.stringify(parsedResult, null, 2), 'success');
+                    }
+                }
+            } catch (error) {
+                if (error instanceof SyntaxError) {
+                    this.showError('Invalid JSON in FHIR resource');
+                } else {
+                    this.showError(`Unexpected error: ${error.message}`);
+                }
+            } finally {
+                this.showLoading(false);
+            }
+        }
+
+        async validateExpression() {
+            if (!this.isInitialized) {
+                this.showError('WASM module not initialized yet. Please wait...');
+                return;
+            }
+
+            const expression = document.getElementById('expression-input').value.trim();
+
+            if (!expression) {
+                this.showError('Please enter a FHIRPath expression to validate');
+                return;
+            }
+
+            this.showLoading(true);
+
+            try {
+                const result = validate_fhirpath(expression);
+                const parsedResult = JSON.parse(result);
+
+                if (parsedResult.valid) {
+                    this.showResult('✅ Expression is valid', 'success');
+                } else {
+                    this.showResult(`❌ Expression is invalid: ${parsedResult.error}`, 'error');
+                }
+            } catch (error) {
+                this.showError(`Validation error: ${error.message}`);
+            } finally {
+                this.showLoading(false);
+            }
+        }
+
+        showResult(result, type = 'success') {
+            const resultOutput = document.getElementById('result-output');
+            resultOutput.textContent = result;
+            resultOutput.className = type;
+        }
+
+        showError(message) {
+            this.showResult(`❌ Error: ${message}`, 'error');
+        }
+
+        showLoading(show) {
+            const loading = document.getElementById('loading');
+            const resultOutput = document.getElementById('result-output');
+
+            if (show) {
+                loading.classList.remove('hidden');
+                resultOutput.style.opacity = '0.5';
+            } else {
+                loading.classList.add('hidden');
+                resultOutput.style.opacity = '1';
+            }
+        }
+    }
+
+    // Initialize the demo when the page loads
+    document.addEventListener('DOMContentLoaded', async () => {
+        const demo = new FHIRPathDemo();
+        await demo.init();
+    });
+
+    // Handle any unhandled promise rejections
+    window.addEventListener('unhandledrejection', (event) => {
+        console.error('Unhandled promise rejection:', event.reason);
+        event.preventDefault();
+    });
+
+    // Export for debugging
+    window.FHIRPathDemo = FHIRPathDemo;
+</script>
+</body>
+</html>

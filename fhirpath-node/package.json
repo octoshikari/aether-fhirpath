@@ -1,5 +1,5 @@
 {
-  "name": "@aether/fhirpath",
+  "name": "@aether/fhirpath-node",
   "version": "0.1.0",
   "description": "Node.js bindings for FHIRPath Rust implementation",
   "main": "index.cjs",
@@ -28,7 +28,7 @@
     "rust",
     "napi-rs"
   ],
-  "author": "Aether FHIRPath Team",
+  "author": "Aether FHIRPath Team <funyloony@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

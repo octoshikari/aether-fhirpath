@@ -4,6 +4,7 @@ members = [
     "fhirpath-core",
     "fhirpath-cli",
     "fhirpath-node",
+    "fhirpath-wasm",
 ]
 
 [workspace.package]

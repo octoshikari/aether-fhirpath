@@ -34,11 +34,28 @@ jobs:
         id: pages
         uses: actions/configure-pages@v4
 
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build fhirpath-wasm
+        run: cd fhirpath-wasm && npm run build
+
+      - name: Copy WASM files to docs-site public folder
+        run: |
+          mkdir -p docs-site/public/pkg
+          cp fhirpath-wasm/pkg/* docs-site/public/pkg/
+
       - name: Install dependencies
         run: cd docs-site && npm ci
 
       - name: Build with Astro
-        run: cd docs-site && GITHUB_ACTIONS=true npm run build
+        run: cd docs-site && npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

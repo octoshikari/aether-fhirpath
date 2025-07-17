@@ -11,7 +11,8 @@ export default defineConfig({
             title: 'Aether FHIRPath',
             description: 'A high-performance FHIRPath implementation in Rust with multiple language bindings.',
             social: [
-                {icon: 'github', label: 'GitHub', href: 'https://github.com/octoshikari/aether-fhirpath'}
+                {icon: 'github', label: 'GitHub', href: 'https://github.com/octoshikari/aether-fhirpath'},
+                {icon: 'external', label: 'Playground', href: '/playground'}
             ],
             sidebar: [
                 {
@@ -28,6 +29,7 @@ export default defineConfig({
                         {label: 'CLI Tool', slug: 'usage/cli'},
                         {label: 'Rust Library', slug: 'usage/rust'},
                         {label: 'Node.js Bindings', slug: 'usage/nodejs'},
+                        {label: 'WebAssembly', slug: 'usage/wasm'},
                     ],
                 },
                 {
@@ -51,6 +53,9 @@ export default defineConfig({
                     ],
                 },
             ],
+            components: {
+                SiteTitle: "./src/components/SiteTitle.astro",
+            }
         }),
     ],
 });

@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
+    "build:wasm": "cd ../fhirpath-wasm && npm run build",
+    "copy:wasm": "mkdir -p public/pkg && cp ../fhirpath-wasm/pkg/* public/pkg/",
+    "prebuild": "npm run build:wasm && npm run copy:wasm",
     "build": "astro build --base /aether-fhirpath",
     "preview": "astro preview",
     "astro": "astro"
