@@ -379,23 +379,36 @@
 </div>
 
 <script type="module">
-    import init, {
-        evaluate_fhirpath,
-        validate_fhirpath,
-        get_fhirpath_version
-    } from '/pkg/fhirpath_wasm.js';
+    // Dynamically import the WASM module using the correct base path
+    const wasmModulePath = `${PUBLIC_BASE_URL ?? '/'}pkg/fhirpath_wasm.js`;
 
     class FHIRPathDemo {
         constructor() {
             this.wasmModule = null;
             this.isInitialized = false;
+
+            // These will be set once the WASM module is loaded
+            this.evaluate_fhirpath = null;
+            this.validate_fhirpath = null;
+            this.get_fhirpath_version = null;
         }
 
         async init() {
             try {
+                // Dynamically import the WASM module
+                const wasmGlue = await import(/* @vite-ignore */ wasmModulePath);
+
+                // Store the functions we need
+                const { default: initWasm, evaluate_fhirpath, validate_fhirpath, get_fhirpath_version } = wasmGlue;
+
                 // Initialize the WASM module
-                this.wasmModule = await init();
+                this.wasmModule = await initWasm();
                 this.isInitialized = true;
+
+                // Store the functions for later use
+                this.evaluate_fhirpath = evaluate_fhirpath;
+                this.validate_fhirpath = validate_fhirpath;
+                this.get_fhirpath_version = get_fhirpath_version;
 
                 // Set default JSON content
                 this.setDefaultContent();
@@ -414,7 +427,7 @@
         }
 
         setDefaultContent() {
-            const defaultJson = `{
+            document.getElementById('resource-input').value = `{
   "resourceType": "Patient",
   "id": "example",
   "name": [
@@ -441,12 +454,11 @@
     }
   ]
 }`;
-            document.getElementById('resource-input').value = defaultJson;
         }
 
         updateVersionInfo() {
             try {
-                const version = get_fhirpath_version();
+                const version = this.get_fhirpath_version();
                 const versionElement = document.getElementById('version-info');
                 versionElement.textContent = `FHIRPath Spec Version: ${version}`;
             } catch (error) {
@@ -518,7 +530,7 @@
                 JSON.parse(resourceJson);
 
                 // Evaluate the expression
-                const result = evaluate_fhirpath(expression, resourceJson);
+                const result = this.evaluate_fhirpath(expression, resourceJson);
 
                 if (result === 'null') {
                     this.showResult("null", 'success');
@@ -557,7 +569,7 @@
             this.showLoading(true);
 
             try {
-                const result = validate_fhirpath(expression);
+                const result = this.validate_fhirpath(expression);
                 const parsedResult = JSON.parse(result);
 
                 if (parsedResult.valid) {

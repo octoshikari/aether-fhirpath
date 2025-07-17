@@ -58,4 +58,10 @@ export default defineConfig({
             }
         }),
     ],
+    vite: {
+        define: {
+            // Expose other env variables if needed
+            'PUBLIC_BASE_URL': JSON.stringify(import.meta.env.BASE_URL),
+        }
+    }
 });
