@@ -2,8 +2,8 @@
 import AstrolightSiteTitle from "@astrojs/starlight/components/SiteTitle.astro";
 
 const menuItems = [
-    {name: "Docs", href: "getting-started/installation/", target: "_self"},
-    {name: "Playground", href: "playground", target: "_blank"},
+    {name: "Docs", href: "/getting-started/installation/", target: "_self"},
+    {name: "Playground", href: "/playground", target: "_blank"},
 ];
 
 function pathsMatch(pathA: string, pathB: string): boolean {
@@ -20,7 +20,7 @@ function pathsMatch(pathA: string, pathB: string): boolean {
         {
             menuItems.map((menuItem) => (
                     <a
-                            href={menuItem.href}
+                            href={`${import.meta.env.BASE_URL}${menuItem.href}`}
                             target={menuItem.target}
                             aria-current={
                                 pathsMatch(encodeURI(menuItem.href), Astro.url.pathname) && "page"
