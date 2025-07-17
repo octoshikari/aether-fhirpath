@@ -7,6 +7,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aether FHIRPath - Playground</title>
+    <script>
+        import { PUBLIC_BASE_URL } from "astro:env/client";
+        let baseUrl = PUBLIC_BASE_URL;
+        baseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+        window.PUBLIC_BASE_URL = baseUrl</script>
     <style>
         /* Reset and base styles */
         * {
@@ -380,7 +385,7 @@
 
 <script type="module">
     // Dynamically import the WASM module using the correct base path
-    const wasmModulePath = `${import.meta.env?.PUBLIC_BASE_URL ?? '/'}pkg/fhirpath_wasm.js`;
+    const wasmModulePath = `${window.PUBLIC_BASE_URL}pkg/fhirpath_wasm.js`;
 
     class FHIRPathDemo {
         constructor() {
