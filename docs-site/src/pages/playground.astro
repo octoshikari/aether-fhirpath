@@ -380,7 +380,7 @@
 
 <script type="module">
     // Dynamically import the WASM module using the correct base path
-    const wasmModulePath = `${PUBLIC_BASE_URL ?? '/'}pkg/fhirpath_wasm.js`;
+    const wasmModulePath = `${import.meta.env?.PUBLIC_BASE_URL ?? '/'}pkg/fhirpath_wasm.js`;
 
     class FHIRPathDemo {
         constructor() {

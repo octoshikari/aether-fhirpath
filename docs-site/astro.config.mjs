@@ -1,5 +1,5 @@
 // @ts-check
-import {defineConfig} from 'astro/config';
+import {defineConfig, envField} from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
@@ -58,10 +58,9 @@ export default defineConfig({
             }
         }),
     ],
-    vite: {
-        define: {
-            // Expose other env variables if needed
-            'PUBLIC_BASE_URL': JSON.stringify(import.meta.env.BASE_URL),
+    env: {
+        schema: {
+            PUBLIC_BASE_URL: envField.string({ context: "client", access: "public" }),
         }
     }
 });
