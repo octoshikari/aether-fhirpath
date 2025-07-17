@@ -2,9 +2,9 @@
 //
 // This module defines the data model for FHIRPath values.
 
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 use serde::de::Error as SerdeError;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// FHIRPath value types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -34,10 +34,7 @@ pub enum FhirPathValue {
     Time(String),
 
     /// Quantity value with unit
-    Quantity {
-        value: f64,
-        unit: String,
-    },
+    Quantity { value: f64, unit: String },
 
     /// Collection of values
     Collection(Vec<FhirPathValue>),
@@ -80,7 +77,7 @@ impl FhirResource {
                     resource_type,
                     properties,
                 })
-            },
+            }
             _ => Err(SerdeError::custom("Expected JSON object for FHIR resource")),
         }
     }
@@ -90,7 +87,10 @@ impl FhirResource {
         let mut map = serde_json::Map::new();
 
         if let Some(rt) = &self.resource_type {
-            map.insert("resourceType".to_string(), serde_json::Value::String(rt.clone()));
+            map.insert(
+                "resourceType".to_string(),
+                serde_json::Value::String(rt.clone()),
+            );
         }
 
         for (key, value) in &self.properties {

@@ -1,4 +1,4 @@
-import { FhirPathEngine, getEngineInfo } from '../index';
+import { FhirPathEngine, getEngineInfo, exists } from '../index';
 
 // Sample FHIR resource for testing
 const patientResource = JSON.stringify({
@@ -54,5 +54,39 @@ describe('FHIRPath Node.js Bindings', () => {
     expect(Array.isArray(parsedResult)).toBe(true);
     expect(parsedResult).toContain('John');
     expect(parsedResult).toContain('Jacob');
+  });
+
+  test('should evaluate a FHIRPath expression asynchronously', async () => {
+    const result = await engine.evaluateAsync('Patient.name.given', patientResource);
+    // Parse the result as JSON to check its structure
+    const parsedResult = JSON.parse(result);
+    // The result should be an array with two elements: "John" and "Jacob"
+    expect(Array.isArray(parsedResult)).toBe(true);
+    expect(parsedResult).toContain('John');
+    expect(parsedResult).toContain('Jacob');
+  });
+
+  test('should check if expression returns results using exists function', () => {
+    // Test with expression that returns results
+    const hasName = exists('Patient.name.given', patientResource);
+    expect(hasName).toBe(true);
+
+    // Test with expression that returns no results
+    const hasEmail = exists('Patient.telecom', patientResource);
+    expect(hasEmail).toBe(false);
+
+    // Test with expression that returns single result
+    const hasGender = exists('Patient.gender', patientResource);
+    expect(hasGender).toBe(true);
+  });
+
+  test('should handle async evaluation errors gracefully', async () => {
+    // Test with invalid resource JSON
+    await expect(engine.evaluateAsync('Patient.name', 'invalid json')).rejects.toThrow();
+  });
+
+  test('should handle exists function errors gracefully', () => {
+    // Test with invalid resource JSON
+    expect(() => exists('Patient.name', 'invalid json')).toThrow();
   });
 });

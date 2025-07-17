@@ -33,11 +33,11 @@ fn main() {
                 } else {
                     println!("  ✅ CORRECT");
                 }
-            },
+            }
             Ok(other) => {
                 println!("{} = {:?} (expected Boolean)", expr, other);
                 println!("  ❌ WRONG TYPE!");
-            },
+            }
             Err(e) => {
                 println!("{} = ERROR: {:?}", expr, e);
                 println!("  ❌ ERROR!");

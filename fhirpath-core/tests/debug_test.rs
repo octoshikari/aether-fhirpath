@@ -1,6 +1,6 @@
 // Debug test for lexer
 
-use fhirpath_core::lexer::{tokenize, TokenType};
+use fhirpath_core::lexer::{TokenType, tokenize};
 
 #[test]
 fn debug_complex_expression() {

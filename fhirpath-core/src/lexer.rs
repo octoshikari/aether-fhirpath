@@ -2,10 +2,10 @@
 //
 // This module implements the lexical analysis for FHIRPath expressions.
 
-use std::collections::HashMap;
-use std::str::Chars;
-use std::iter::Peekable;
 use crate::errors::FhirPathError;
+use std::collections::HashMap;
+use std::iter::Peekable;
+use std::str::Chars;
 
 /// Token types for FHIRPath expressions
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,17 +17,17 @@ pub enum TokenType {
     BooleanLiteral,
 
     // Operators
-    Dot,          // .
-    Equal,        // =
-    NotEqual,     // !=
-    LessThan,     // <
-    LessOrEqual,  // <=
-    GreaterThan,  // >
+    Dot,            // .
+    Equal,          // =
+    NotEqual,       // !=
+    LessThan,       // <
+    LessOrEqual,    // <=
+    GreaterThan,    // >
     GreaterOrEqual, // >=
-    Plus,         // +
-    Minus,        // -
-    Multiply,     // *
-    Divide,       // /
+    Plus,           // +
+    Minus,          // -
+    Multiply,       // *
+    Divide,         // /
 
     // Delimiters
     LeftParen,    // (
@@ -37,11 +37,11 @@ pub enum TokenType {
     Comma,        // ,
 
     // Keywords
-    And,          // and
-    Or,           // or
-    Xor,          // xor
-    Implies,      // implies
-    In,           // in
+    And,     // and
+    Or,      // or
+    Xor,     // xor
+    Implies, // implies
+    In,      // in
 
     // End of input
     EOF,
@@ -202,17 +202,17 @@ impl<'a> Lexer<'a> {
                 // Ensure there's at least one digit after the decimal
                 if let Some(&next) = self.peek() {
                     if !next.is_digit(10) {
-                        return Err(FhirPathError::LexerError(
-                            format!("Expected digit after decimal point at line {}, column {}",
-                                    self.line, self.column)
-                        ));
+                        return Err(FhirPathError::LexerError(format!(
+                            "Expected digit after decimal point at line {}, column {}",
+                            self.line, self.column
+                        )));
                     }
                 } else {
                     // No character after decimal point
-                    return Err(FhirPathError::LexerError(
-                        format!("Expected digit after decimal point at line {}, column {}",
-                                self.line, self.column)
-                    ));
+                    return Err(FhirPathError::LexerError(format!(
+                        "Expected digit after decimal point at line {}, column {}",
+                        self.line, self.column
+                    )));
                 }
             } else {
                 break;
@@ -264,9 +264,10 @@ impl<'a> Lexer<'a> {
                     column: start_column,
                 });
             } else if c == '\n' {
-                return Err(FhirPathError::LexerError(
-                    format!("Unterminated string literal at line {}", start_line)
-                ));
+                return Err(FhirPathError::LexerError(format!(
+                    "Unterminated string literal at line {}",
+                    start_line
+                )));
             } else {
                 string.push(c);
                 self.advance();
@@ -274,10 +275,10 @@ impl<'a> Lexer<'a> {
         }
 
         // If we get here, the string wasn't terminated
-        Err(FhirPathError::LexerError(
-            format!("Unterminated string literal at line {}, column {}",
-                    start_line, start_column)
-        ))
+        Err(FhirPathError::LexerError(format!(
+            "Unterminated string literal at line {}, column {}",
+            start_line, start_column
+        )))
     }
 
     /// Scans the next token
@@ -290,49 +291,49 @@ impl<'a> Lexer<'a> {
                 '(' => {
                     self.advance();
                     Ok(self.make_token(TokenType::LeftParen, "(".to_string()))
-                },
+                }
                 ')' => {
                     self.advance();
                     Ok(self.make_token(TokenType::RightParen, ")".to_string()))
-                },
+                }
                 '[' => {
                     self.advance();
                     Ok(self.make_token(TokenType::LeftBracket, "[".to_string()))
-                },
+                }
                 ']' => {
                     self.advance();
                     Ok(self.make_token(TokenType::RightBracket, "]".to_string()))
-                },
+                }
                 ',' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Comma, ",".to_string()))
-                },
+                }
                 '.' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Dot, ".".to_string()))
-                },
+                }
                 '+' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Plus, "+".to_string()))
-                },
+                }
                 '-' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Minus, "-".to_string()))
-                },
+                }
                 '*' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Multiply, "*".to_string()))
-                },
+                }
                 '/' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Divide, "/".to_string()))
-                },
+                }
 
                 // Two-character tokens
                 '=' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Equal, "=".to_string()))
-                },
+                }
                 '!' => {
                     self.advance();
                     if let Some(&next) = self.peek() {
@@ -341,11 +342,12 @@ impl<'a> Lexer<'a> {
                             return Ok(self.make_token(TokenType::NotEqual, "!=".to_string()));
                         }
                     }
-                    Err(FhirPathError::LexerError(
-                        format!("Unexpected character '!' at line {}, column {}",
-                                self.line, self.column - 1)
-                    ))
-                },
+                    Err(FhirPathError::LexerError(format!(
+                        "Unexpected character '!' at line {}, column {}",
+                        self.line,
+                        self.column - 1
+                    )))
+                }
                 '<' => {
                     self.advance();
                     if let Some(&next) = self.peek() {
@@ -355,7 +357,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     Ok(self.make_token(TokenType::LessThan, "<".to_string()))
-                },
+                }
                 '>' => {
                     self.advance();
                     if let Some(&next) = self.peek() {
@@ -365,7 +367,7 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     Ok(self.make_token(TokenType::GreaterThan, ">".to_string()))
-                },
+                }
 
                 // String literals
                 '\'' => self.string(),
@@ -377,10 +379,10 @@ impl<'a> Lexer<'a> {
                 'a'..='z' | 'A'..='Z' | '_' => self.identifier(),
 
                 // Unexpected character
-                _ => Err(FhirPathError::LexerError(
-                    format!("Unexpected character '{}' at line {}, column {}",
-                            c, self.line, self.column)
-                )),
+                _ => Err(FhirPathError::LexerError(format!(
+                    "Unexpected character '{}' at line {}, column {}",
+                    c, self.line, self.column
+                ))),
             }
         } else {
             // End of input

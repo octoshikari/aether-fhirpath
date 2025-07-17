@@ -2,7 +2,7 @@
 //
 // This file contains tests for the FHIRPath lexer.
 
-use fhirpath_core::lexer::{tokenize, Token, TokenType};
+use fhirpath_core::lexer::{TokenType, tokenize};
 
 #[test]
 fn test_empty_input() {

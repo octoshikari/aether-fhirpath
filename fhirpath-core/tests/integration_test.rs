@@ -23,7 +23,8 @@ fn test_load_fixture() {
     assert!(fixture_path.exists(), "Fixture file does not exist");
 
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read fixture file");
-    let json: serde_json::Value = serde_json::from_str(&fixture_content).expect("Failed to parse JSON");
+    let json: serde_json::Value =
+        serde_json::from_str(&fixture_content).expect("Failed to parse JSON");
 
     assert_eq!(json["resourceType"], "Patient", "Expected Patient resource");
 }
@@ -38,17 +39,25 @@ fn test_simple_path_expression() {
         .join("patient-example.json");
 
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read fixture file");
-    let resource: serde_json::Value = serde_json::from_str(&fixture_content).expect("Failed to parse JSON");
+    let resource: serde_json::Value =
+        serde_json::from_str(&fixture_content).expect("Failed to parse JSON");
 
     // Now that the FHIRPath engine is implemented, this should work
     let result = fhirpath_core::evaluate("Patient.name.given", resource);
-    assert!(result.is_ok(), "FHIRPath evaluation failed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "FHIRPath evaluation failed: {:?}",
+        result.err()
+    );
 
     let value = result.unwrap();
     println!("DEBUG: Actual result from Patient.name.given: {:?}", value);
     println!("DEBUG: Result type: {:?}", value);
     println!("DEBUG: Is array? {}", value.is_array());
-    assert!(value.is_array(), "Expected array result for Patient.name.given");
+    assert!(
+        value.is_array(),
+        "Expected array result for Patient.name.given"
+    );
 
     // The patient example should have at least one given name
     let array = value.as_array().unwrap();

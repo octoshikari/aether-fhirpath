@@ -1,7 +1,9 @@
-use fhirpath_core::evaluator::{evaluate_expression_with_visitor, AstVisitor, EvaluationContext, NoopVisitor};
-use fhirpath_core::parser::AstNode;
 use fhirpath_core::errors::FhirPathError;
+use fhirpath_core::evaluator::{
+    AstVisitor, EvaluationContext, NoopVisitor, evaluate_expression_with_visitor,
+};
 use fhirpath_core::model::FhirPathValue;
+use fhirpath_core::parser::AstNode;
 use serde_json::json;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -55,7 +57,12 @@ impl AstVisitor for CountingVisitor {
         self.node_types.borrow_mut().push(node_type.to_string());
     }
 
-    fn after_evaluate(&self, _node: &AstNode, _context: &EvaluationContext, _result: &Result<FhirPathValue, FhirPathError>) {
+    fn after_evaluate(
+        &self,
+        _node: &AstNode,
+        _context: &EvaluationContext,
+        _result: &Result<FhirPathValue, FhirPathError>,
+    ) {
         *self.after_count.borrow_mut() += 1;
     }
 }
@@ -105,7 +112,7 @@ fn test_visitor_with_complex_expression() {
     let result = evaluate_expression_with_visitor(
         "Patient.name[0].given[0] = 'John' and Patient.gender = 'male'",
         resource.clone(),
-        &visitor
+        &visitor,
     );
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), FhirPathValue::Boolean(true));
@@ -137,8 +144,13 @@ fn test_noop_visitor() {
     });
 
     // The NoopVisitor should not affect the result
-    let result1 = evaluate_expression_with_visitor("Patient.name.given", resource.clone(), &visitor);
-    let result2 = evaluate_expression_with_visitor("Patient.name.given", resource.clone(), &CountingVisitor::new());
+    let result1 =
+        evaluate_expression_with_visitor("Patient.name.given", resource.clone(), &visitor);
+    let result2 = evaluate_expression_with_visitor(
+        "Patient.name.given",
+        resource.clone(),
+        &CountingVisitor::new(),
+    );
 
     // Check that both results are Ok or both are Err
     assert!(result1.is_ok() == result2.is_ok());

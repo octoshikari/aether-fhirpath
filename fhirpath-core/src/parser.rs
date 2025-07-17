@@ -78,10 +78,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     /// Creates a new parser
     pub fn new(tokens: &'a [Token]) -> Self {
-        Self {
-            tokens,
-            current: 0,
-        }
+        Self { tokens, current: 0 }
     }
 
     /// Parses a FHIRPath expression
@@ -360,27 +357,33 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                self.consume(TokenType::RightParen, "Expected ')' after function arguments")?;
+                self.consume(
+                    TokenType::RightParen,
+                    "Expected ')' after function arguments",
+                )?;
 
-                Ok(AstNode::FunctionCall {
-                    name,
-                    arguments,
-                })
+                Ok(AstNode::FunctionCall { name, arguments })
             } else {
                 Ok(AstNode::Identifier(name))
             }
         } else if self.match_token(TokenType::StringLiteral) {
             Ok(AstNode::StringLiteral(self.previous().lexeme.clone()))
         } else if self.match_token(TokenType::NumberLiteral) {
-            let value = self.previous().lexeme.parse::<f64>().map_err(|e| {
-                FhirPathError::ParserError(format!("Invalid number: {}", e))
-            })?;
+            let value = self
+                .previous()
+                .lexeme
+                .parse::<f64>()
+                .map_err(|e| FhirPathError::ParserError(format!("Invalid number: {}", e)))?;
             Ok(AstNode::NumberLiteral(value))
         } else if self.match_token(TokenType::BooleanLiteral) {
             let value = match self.previous().lexeme.as_str() {
                 "true" => true,
                 "false" => false,
-                _ => return Err(FhirPathError::ParserError("Invalid boolean literal".to_string())),
+                _ => {
+                    return Err(FhirPathError::ParserError(
+                        "Invalid boolean literal".to_string(),
+                    ));
+                }
             };
             Ok(AstNode::BooleanLiteral(value))
         } else if self.match_token(TokenType::LeftParen) {

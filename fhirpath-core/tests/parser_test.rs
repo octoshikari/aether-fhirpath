@@ -2,8 +2,8 @@
 //
 // This file contains tests for the FHIRPath parser.
 
-use fhirpath_core::lexer::{tokenize, TokenType};
-use fhirpath_core::parser::{parse, AstNode, BinaryOperator};
+use fhirpath_core::lexer::tokenize;
+use fhirpath_core::parser::{AstNode, BinaryOperator, parse};
 
 #[test]
 fn test_parse_identifier() {
@@ -13,7 +13,7 @@ fn test_parse_identifier() {
     match ast {
         AstNode::Identifier(name) => {
             assert_eq!(name, "Patient");
-        },
+        }
         _ => panic!("Expected Identifier node, got {:?}", ast),
     }
 }
@@ -26,7 +26,7 @@ fn test_parse_string_literal() {
     match ast {
         AstNode::StringLiteral(value) => {
             assert_eq!(value, "hello");
-        },
+        }
         _ => panic!("Expected StringLiteral node, got {:?}", ast),
     }
 }
@@ -39,7 +39,7 @@ fn test_parse_number_literal() {
     match ast {
         AstNode::NumberLiteral(value) => {
             assert_eq!(value, 42.5);
-        },
+        }
         _ => panic!("Expected NumberLiteral node, got {:?}", ast),
     }
 }
@@ -52,7 +52,7 @@ fn test_parse_boolean_literal() {
     match ast {
         AstNode::BooleanLiteral(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected BooleanLiteral node, got {:?}", ast),
     }
 }
@@ -67,17 +67,17 @@ fn test_parse_path_expression() {
             match *left {
                 AstNode::Identifier(ref name) => {
                     assert_eq!(name, "Patient");
-                },
+                }
                 _ => panic!("Expected Identifier node for left side, got {:?}", left),
             }
 
             match *right {
                 AstNode::Identifier(ref name) => {
                     assert_eq!(name, "name");
-                },
+                }
                 _ => panic!("Expected Identifier node for right side, got {:?}", right),
             }
-        },
+        }
         _ => panic!("Expected Path node, got {:?}", ast),
     }
 }
@@ -94,27 +94,33 @@ fn test_parse_indexer() {
                     match **left {
                         AstNode::Identifier(ref name) => {
                             assert_eq!(name, "Patient");
-                        },
-                        _ => panic!("Expected Identifier node for path left side, got {:?}", left),
+                        }
+                        _ => panic!(
+                            "Expected Identifier node for path left side, got {:?}",
+                            left
+                        ),
                     }
 
                     match **right {
                         AstNode::Identifier(ref name) => {
                             assert_eq!(name, "name");
-                        },
-                        _ => panic!("Expected Identifier node for path right side, got {:?}", right),
+                        }
+                        _ => panic!(
+                            "Expected Identifier node for path right side, got {:?}",
+                            right
+                        ),
                     }
-                },
+                }
                 _ => panic!("Expected Path node for collection, got {:?}", collection),
             }
 
             match *index {
                 AstNode::NumberLiteral(value) => {
                     assert_eq!(value, 0.0);
-                },
+                }
                 _ => panic!("Expected NumberLiteral node for index, got {:?}", index),
             }
-        },
+        }
         _ => panic!("Expected Indexer node, got {:?}", ast),
     }
 }
@@ -136,20 +142,26 @@ fn test_parse_function_call() {
                     match **left {
                         AstNode::Identifier(ref name) => {
                             assert_eq!(name, "gender");
-                        },
+                        }
                         _ => panic!("Expected Identifier node for left operand, got {:?}", left),
                     }
 
                     match **right {
                         AstNode::StringLiteral(ref value) => {
                             assert_eq!(value, "male");
-                        },
-                        _ => panic!("Expected StringLiteral node for right operand, got {:?}", right),
+                        }
+                        _ => panic!(
+                            "Expected StringLiteral node for right operand, got {:?}",
+                            right
+                        ),
                     }
-                },
-                _ => panic!("Expected BinaryOp node for argument, got {:?}", arguments[0]),
+                }
+                _ => panic!(
+                    "Expected BinaryOp node for argument, got {:?}",
+                    arguments[0]
+                ),
             }
-        },
+        }
         _ => panic!("Expected FunctionCall node, got {:?}", ast),
     }
 }
@@ -160,7 +172,11 @@ fn test_parse_binary_expression() {
     let ast = parse(&tokens).unwrap();
 
     match ast {
-        AstNode::BinaryOp { op: op_and, left: left_and, right: right_and } => {
+        AstNode::BinaryOp {
+            op: op_and,
+            left: left_and,
+            right: right_and,
+        } => {
             assert_eq!(op_and, BinaryOperator::And);
 
             match *left_and {
@@ -170,17 +186,20 @@ fn test_parse_binary_expression() {
                     match *left {
                         AstNode::Identifier(ref name) => {
                             assert_eq!(name, "age");
-                        },
+                        }
                         _ => panic!("Expected Identifier node for left operand, got {:?}", left),
                     }
 
                     match *right {
                         AstNode::NumberLiteral(value) => {
                             assert_eq!(value, 18.0);
-                        },
-                        _ => panic!("Expected NumberLiteral node for right operand, got {:?}", right),
+                        }
+                        _ => panic!(
+                            "Expected NumberLiteral node for right operand, got {:?}",
+                            right
+                        ),
                     }
-                },
+                }
                 _ => panic!("Expected BinaryOp node for left side, got {:?}", left_and),
             }
 
@@ -191,20 +210,23 @@ fn test_parse_binary_expression() {
                     match *left {
                         AstNode::Identifier(ref name) => {
                             assert_eq!(name, "gender");
-                        },
+                        }
                         _ => panic!("Expected Identifier node for left operand, got {:?}", left),
                     }
 
                     match *right {
                         AstNode::StringLiteral(ref value) => {
                             assert_eq!(value, "male");
-                        },
-                        _ => panic!("Expected StringLiteral node for right operand, got {:?}", right),
+                        }
+                        _ => panic!(
+                            "Expected StringLiteral node for right operand, got {:?}",
+                            right
+                        ),
                     }
-                },
+                }
                 _ => panic!("Expected BinaryOp node for right side, got {:?}", right_and),
             }
-        },
+        }
         _ => panic!("Expected BinaryOp node, got {:?}", ast),
     }
 }

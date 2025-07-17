@@ -5,8 +5,9 @@
 #[macro_use]
 extern crate napi_derive;
 
-use napi::{Error, Result};
 use fhirpath_core;
+use napi::{Error, Result};
+use serde_json;
 
 #[napi]
 pub struct FhirPathEngine {
@@ -20,21 +21,57 @@ impl FhirPathEngine {
         Self {}
     }
 
-    /// Evaluates a FHIRPath expression against a FHIR resource
+    /// Evaluates an FHIRPath expression against a FHIR resource (synchronous)
     #[napi]
     pub fn evaluate(&self, expression: String, resource: String) -> Result<String> {
         // Parse the resource as JSON
         let resource_json = match serde_json::from_str::<serde_json::Value>(&resource) {
             Ok(json) => json,
-            Err(err) => return Err(Error::from_reason(format!("Failed to parse resource as JSON: {}", err))),
+            Err(err) => {
+                return Err(Error::from_reason(format!(
+                    "Failed to parse resource as JSON: {}",
+                    err
+                )));
+            }
         };
 
         // Evaluate the expression using the core FHIRPath engine
         let result = match fhirpath_core::evaluate(&expression, resource_json) {
-            Ok(value) => serde_json::to_string(&value)
-                .map_err(|err| Error::from_reason(format!("Failed to serialize result: {}", err)))?,
-            Err(err) => return Err(Error::from_reason(format!("FHIRPath evaluation error: {}", err))),
+            Ok(value) => serde_json::to_string(&value).map_err(|err| {
+                Error::from_reason(format!("Failed to serialize result: {}", err))
+            })?,
+            Err(err) => {
+                return Err(Error::from_reason(format!(
+                    "FHIRPath evaluation error: {}",
+                    err
+                )));
+            }
         };
+
+        Ok(result)
+    }
+
+    /// Evaluates an FHIRPath expression against a FHIR resource (asynchronous)
+    /// Uses a thread pool for CPU-bound operations to avoid blocking the event loop
+    #[napi]
+    pub async fn evaluate_async(&self, expression: String, resource: String) -> Result<String> {
+        // Use tokio::task::spawn_blocking to run CPU-bound work in a thread pool
+        let result = tokio::task::spawn_blocking(move || {
+            // Parse the resource as JSON
+            let resource_json =
+                serde_json::from_str::<serde_json::Value>(&resource).map_err(|err| {
+                    Error::from_reason(format!("Failed to parse resource as JSON: {}", err))
+                })?;
+
+            // Evaluate the expression using the core FHIRPath engine
+            let result = fhirpath_core::evaluate(&expression, resource_json)
+                .map_err(|err| Error::from_reason(format!("FHIRPath evaluation error: {}", err)))?;
+
+            serde_json::to_string(&result)
+                .map_err(|err| Error::from_reason(format!("Failed to serialize result: {}", err)))
+        })
+        .await
+        .map_err(|err| Error::from_reason(format!("Task execution error: {}", err)))??;
 
         Ok(result)
     }
@@ -53,21 +90,45 @@ impl FhirPathEngine {
 
         // Parse the tokens
         match fhirpath_core::parser::parse(&tokens) {
-            Ok(_) => Ok(true),  // Parsing succeeded, expression is valid
-            Err(_) => Ok(false) // Parsing failed, expression is invalid
+            Ok(_) => Ok(true),   // Parsing succeeded, expression is valid
+            Err(_) => Ok(false), // Parsing failed, expression is invalid
         }
     }
 
     /// Returns the version of the FHIRPath engine
     #[napi]
     pub fn version(&self) -> String {
-        format!("FHIRPath Engine v{} (spec: {})",
-                env!("CARGO_PKG_VERSION"),
-                fhirpath_core::FHIRPATH_SPEC_VERSION)
+        format!(
+            "FHIRPath Engine v{} (spec: {})",
+            env!("CARGO_PKG_VERSION"),
+            fhirpath_core::FHIRPATH_SPEC_VERSION
+        )
     }
 }
 
 #[napi]
 pub fn get_engine_info() -> String {
-    format!("FHIRPath Rust Engine v{} (Node.js bindings)", env!("CARGO_PKG_VERSION"))
+    format!(
+        "FHIRPath Rust Engine v{} (Node.js bindings)",
+        env!("CARGO_PKG_VERSION")
+    )
+}
+
+/// Convenience function to check if an FHIRPath expression returns any results
+#[napi]
+pub fn exists(expression: String, resource: String) -> Result<bool> {
+    // Parse the resource as JSON
+    let resource_json = serde_json::from_str::<serde_json::Value>(&resource)
+        .map_err(|err| Error::from_reason(format!("Failed to parse resource as JSON: {}", err)))?;
+
+    // Evaluate the expression using the core FHIRPath engine
+    let result = fhirpath_core::evaluate(&expression, resource_json)
+        .map_err(|err| Error::from_reason(format!("FHIRPath evaluation error: {}", err)))?;
+
+    // Check if result is non-empty
+    match result {
+        serde_json::Value::Array(arr) => Ok(!arr.is_empty()),
+        serde_json::Value::Null => Ok(false),
+        _ => Ok(true),
+    }
 }

@@ -2,9 +2,9 @@
 //
 // This file contains tests for the FHIRPath evaluator.
 
-use fhirpath_core::evaluator::{evaluate_expression, evaluate_ast, EvaluationContext};
-use fhirpath_core::model::FhirPathValue;
+use fhirpath_core::evaluator::{EvaluationContext, evaluate_ast, evaluate_expression};
 use fhirpath_core::lexer::tokenize;
+use fhirpath_core::model::FhirPathValue;
 use fhirpath_core::parser::parse;
 
 #[test]
@@ -25,7 +25,7 @@ fn test_evaluate_identifier() {
     match result {
         FhirPathValue::String(value) => {
             assert_eq!(value, "123");
-        },
+        }
         _ => panic!("Expected String value, got {:?}", result),
     }
 }
@@ -39,7 +39,7 @@ fn test_evaluate_string_literal() {
     match result {
         FhirPathValue::String(value) => {
             assert_eq!(value, "hello");
-        },
+        }
         _ => panic!("Expected String value, got {:?}", result),
     }
 }
@@ -53,7 +53,7 @@ fn test_evaluate_number_literal() {
     match result {
         FhirPathValue::Integer(value) => {
             assert_eq!(value, 42);
-        },
+        }
         _ => panic!("Expected Integer value, got {:?}", result),
     }
 
@@ -62,7 +62,7 @@ fn test_evaluate_number_literal() {
     match result {
         FhirPathValue::Decimal(value) => {
             assert_eq!(value, 42.5);
-        },
+        }
         _ => panic!("Expected Decimal value, got {:?}", result),
     }
 }
@@ -76,7 +76,7 @@ fn test_evaluate_boolean_literal() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -85,7 +85,7 @@ fn test_evaluate_boolean_literal() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 }
@@ -107,7 +107,7 @@ fn test_evaluate_path_expression() {
     match result {
         FhirPathValue::String(value) => {
             assert_eq!(value, "Doe");
-        },
+        }
         _ => panic!("Expected String value, got {:?}", result),
     }
 }
@@ -133,7 +133,7 @@ fn test_evaluate_indexer() {
     match result {
         FhirPathValue::String(value) => {
             assert_eq!(value, "John");
-        },
+        }
         _ => panic!("Expected String value, got {:?}", result),
     }
 
@@ -142,7 +142,7 @@ fn test_evaluate_indexer() {
     match result {
         FhirPathValue::String(value) => {
             assert_eq!(value, "Johnny");
-        },
+        }
         _ => panic!("Expected String value, got {:?}", result),
     }
 }
@@ -159,7 +159,7 @@ fn test_evaluate_equality() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -168,7 +168,7 @@ fn test_evaluate_equality() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -177,7 +177,7 @@ fn test_evaluate_equality() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -186,7 +186,7 @@ fn test_evaluate_equality() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 }
@@ -203,7 +203,7 @@ fn test_evaluate_comparison() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -212,7 +212,7 @@ fn test_evaluate_comparison() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -221,7 +221,7 @@ fn test_evaluate_comparison() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -230,7 +230,7 @@ fn test_evaluate_comparison() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -239,7 +239,7 @@ fn test_evaluate_comparison() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -248,7 +248,7 @@ fn test_evaluate_comparison() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 }
@@ -262,7 +262,7 @@ fn test_evaluate_arithmetic() {
     match result {
         FhirPathValue::Integer(value) => {
             assert_eq!(value, 8);
-        },
+        }
         _ => panic!("Expected Integer value, got {:?}", result),
     }
 
@@ -271,7 +271,7 @@ fn test_evaluate_arithmetic() {
     match result {
         FhirPathValue::Integer(value) => {
             assert_eq!(value, 2);
-        },
+        }
         _ => panic!("Expected Integer value, got {:?}", result),
     }
 
@@ -280,7 +280,7 @@ fn test_evaluate_arithmetic() {
     match result {
         FhirPathValue::Integer(value) => {
             assert_eq!(value, 15);
-        },
+        }
         _ => panic!("Expected Integer value, got {:?}", result),
     }
 
@@ -289,7 +289,7 @@ fn test_evaluate_arithmetic() {
     match result {
         FhirPathValue::Decimal(value) => {
             assert_eq!(value, 2.0);
-        },
+        }
         _ => panic!("Expected Decimal value, got {:?}", result),
     }
 
@@ -298,7 +298,7 @@ fn test_evaluate_arithmetic() {
     match result {
         FhirPathValue::Decimal(value) => {
             assert_eq!(value, 8.5);
-        },
+        }
         _ => panic!("Expected Decimal value, got {:?}", result),
     }
 }
@@ -312,7 +312,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -321,7 +321,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -330,7 +330,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -339,7 +339,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -348,7 +348,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -357,7 +357,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -366,7 +366,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 
@@ -375,7 +375,7 @@ fn test_evaluate_logical() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, false);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 }
@@ -419,7 +419,7 @@ fn test_evaluate_unary() {
     match result {
         FhirPathValue::Integer(value) => {
             assert_eq!(value, -5);
-        },
+        }
         _ => panic!("Expected Integer value, got {:?}", result),
     }
 
@@ -428,7 +428,7 @@ fn test_evaluate_unary() {
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 }
@@ -447,12 +447,13 @@ fn test_evaluate_complex_expression() {
         "age": 25
     });
 
-    let result = evaluate_expression("name[0].family = 'Doe' and gender = 'male'", resource).unwrap();
+    let result =
+        evaluate_expression("name[0].family = 'Doe' and gender = 'male'", resource).unwrap();
 
     match result {
         FhirPathValue::Boolean(value) => {
             assert_eq!(value, true);
-        },
+        }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
 }
@@ -481,7 +482,7 @@ fn test_evaluate_with_context() {
     match result {
         FhirPathValue::String(value) => {
             assert_eq!(value, "Doe");
-        },
+        }
         _ => panic!("Expected String value, got {:?}", result),
     }
 }

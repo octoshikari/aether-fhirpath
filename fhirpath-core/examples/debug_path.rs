@@ -1,5 +1,4 @@
 use fhirpath_core::evaluator::evaluate_expression;
-use fhirpath_core::model::FhirPathValue;
 
 fn main() {
     let resource = serde_json::json!({
@@ -12,7 +11,10 @@ fn main() {
         ]
     });
 
-    println!("Resource: {}", serde_json::to_string_pretty(&resource).unwrap());
+    println!(
+        "Resource: {}",
+        serde_json::to_string_pretty(&resource).unwrap()
+    );
 
     // Test simple property access
     println!("\n=== Testing 'resourceType' ===");

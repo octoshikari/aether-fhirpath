@@ -19,6 +19,35 @@ This project provides:
 - ✅ **Expression Validation**: Syntax validation for FHIRPath expressions
 - ✅ **Multiple Output Formats**: JSON and pretty-printed output
 - ✅ **Streaming Support**: Efficient processing of large FHIR resources
+- ✅ **Test Compliance**: Comprehensive testing against official FHIRPath test suite
+
+## Documentation
+
+This project includes comprehensive documentation available at the documentation site:
+
+- **Test Compliance**: View current status of official FHIRPath test suite compliance
+- **API Reference**: Detailed API documentation for all components
+- **Usage Examples**: Practical examples and tutorials
+- **Implementation Status**: Track development progress and supported features
+
+To build and view the documentation locally:
+
+```bash
+cd docs-site
+npm install
+npm run dev
+```
+
+### Test Compliance Status
+
+The implementation is continuously tested against the official FHIRPath test suite. Current status:
+
+- **179 tests passing** (25.2% compliance)
+- **501 tests failing** (features not yet implemented)
+- **31 tests skipped** (missing test data or dependencies)
+- **711 total tests** in the official suite
+
+View detailed test compliance information in the documentation site under Reference → Test Compliance.
 
 ## Components
 

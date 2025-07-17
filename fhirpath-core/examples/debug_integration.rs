@@ -12,7 +12,8 @@ fn main() {
         .join("patient-example.json");
 
     let fixture_content = fs::read_to_string(fixture_path).expect("Failed to read fixture file");
-    let resource: serde_json::Value = serde_json::from_str(&fixture_content).expect("Failed to parse JSON");
+    let resource: serde_json::Value =
+        serde_json::from_str(&fixture_content).expect("Failed to parse JSON");
 
     println!("Patient resource loaded successfully");
 
@@ -36,7 +37,7 @@ fn main() {
                     println!("  [{}]: {:?}", i, item);
                 }
             }
-        },
+        }
         Err(e) => {
             println!("Error: {:?}", e);
         }
@@ -57,8 +58,19 @@ fn main() {
         match fhirpath_core::evaluate(expr, resource.clone()) {
             Ok(result) => {
                 println!("  Result: {:?}", result);
-                println!("  Type: {}", if result.is_array() { "array" } else if result.is_string() { "string" } else if result.is_object() { "object" } else { "other" });
-            },
+                println!(
+                    "  Type: {}",
+                    if result.is_array() {
+                        "array"
+                    } else if result.is_string() {
+                        "string"
+                    } else if result.is_object() {
+                        "object"
+                    } else {
+                        "other"
+                    }
+                );
+            }
             Err(e) => {
                 println!("  Error: {:?}", e);
             }
