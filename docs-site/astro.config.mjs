@@ -5,9 +5,10 @@ import starlight from '@astrojs/starlight';
 // https://astro.build/config
 export default defineConfig({
     site: 'https://octoshikari.github.io',
-    base: import.meta.env.DEV ? undefined : '/aether-fhirpath',
+    base: process.env.GITHUB_ACTIONS ? '/aether-fhirpath' : undefined,
     integrations: [
         starlight({
+            favicon: '/favicon.ico',
             title: 'Aether FHIRPath',
             description: 'A high-performance FHIRPath implementation in Rust with multiple language bindings.',
             social: [
