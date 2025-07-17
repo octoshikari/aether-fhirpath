@@ -5,7 +5,6 @@ import starlight from '@astrojs/starlight';
 // https://astro.build/config
 export default defineConfig({
     site: 'https://octoshikari.github.io',
-    base: import.meta.env.GITHUB_ACTIONS ? '/aether-fhirpath' : undefined,
     integrations: [
         starlight({
             favicon: '/favicon.ico',
