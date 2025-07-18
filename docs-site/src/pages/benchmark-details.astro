@@ -127,7 +127,8 @@ import {PUBLIC_BASE_URL} from "astro:env/client";
         }
     </style>
     <script>
-        import { PUBLIC_BASE_URL } from "astro:env/client";
+        import {PUBLIC_BASE_URL} from "astro:env/client";
+
         let baseUrl = PUBLIC_BASE_URL;
         baseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
         window.PUBLIC_BASE_URL = baseUrl</script>
@@ -135,7 +136,8 @@ import {PUBLIC_BASE_URL} from "astro:env/client";
 <body>
 <div class="container">
     <nav>
-        <a href=`/comparison`>← Back to Comparison</a>
+        <a href=`${import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/'}comparison`>←
+            Back to Comparison</a>
     </nav>
 
     <header>
@@ -144,7 +146,7 @@ import {PUBLIC_BASE_URL} from "astro:env/client";
     </header>
 
     <main>
-        <BenchmarkDetailsApp client:load />
+        <BenchmarkDetailsApp client:load/>
     </main>
 
     <footer>
