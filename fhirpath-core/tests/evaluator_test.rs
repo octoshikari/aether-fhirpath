@@ -17,7 +17,10 @@ fn extract_single_value(result: FhirPathValue) -> FhirPathValue {
             } else if values.is_empty() {
                 FhirPathValue::Empty
             } else {
-                panic!("Expected single value, got collection with {} items", values.len())
+                panic!(
+                    "Expected single value, got collection with {} items",
+                    values.len()
+                )
             }
         }
         other => other,
@@ -578,11 +581,17 @@ fn test_exists_function_on_property_chain() {
     });
 
     let result = evaluate_expression("name.given.exists()", resource_no_given).unwrap();
-    println!("Result of 'name.given.exists()' on resource without given: {:?}", result);
+    println!(
+        "Result of 'name.given.exists()' on resource without given: {:?}",
+        result
+    );
 
     match result {
         FhirPathValue::Boolean(value) => {
-            assert!(!value, "name.given.exists() should return false when given doesn't exist");
+            assert!(
+                !value,
+                "name.given.exists() should return false when given doesn't exist"
+            );
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -648,10 +657,16 @@ fn test_debug_converts_to_integer() {
     for (expression, expected_desc) in test_cases {
         match evaluate_expression(expression, serde_json::json!({})) {
             Ok(result) => {
-                println!("Expression: {} -> Result: {:?} ({})", expression, result, expected_desc);
+                println!(
+                    "Expression: {} -> Result: {:?} ({})",
+                    expression, result, expected_desc
+                );
             }
             Err(e) => {
-                println!("Expression: {} -> Error: {:?} ({})", expression, e, expected_desc);
+                println!(
+                    "Expression: {} -> Error: {:?} ({})",
+                    expression, e, expected_desc
+                );
             }
         }
     }

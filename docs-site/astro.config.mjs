@@ -1,18 +1,19 @@
 // @ts-check
 import {defineConfig, envField} from 'astro/config';
 import starlight from '@astrojs/starlight';
+import svelte from '@astrojs/svelte';
 
 // https://astro.build/config
 export default defineConfig({
     site: 'https://octoshikari.github.io',
     integrations: [
+        svelte(),
         starlight({
             favicon: '/favicon.ico',
             title: 'Aether FHIRPath',
             description: 'A high-performance FHIRPath implementation in Rust with multiple language bindings.',
             social: [
                 {icon: 'github', label: 'GitHub', href: 'https://github.com/octoshikari/aether-fhirpath'},
-                {icon: 'external', label: 'Playground', href: '/playground'}
             ],
             sidebar: [
                 {

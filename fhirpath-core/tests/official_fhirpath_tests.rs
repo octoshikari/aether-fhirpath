@@ -66,16 +66,31 @@ struct TestOutput {
 fn is_fhir_polymorphic_property(element_name: &str) -> bool {
     // Common FHIR polymorphic properties
     let polymorphic_bases = [
-        "value", "component", "onset", "abatement", "asserted", "recorded",
-        "onset", "offset", "target", "entity", "detail", "reason", "performer"
+        "value",
+        "component",
+        "onset",
+        "abatement",
+        "asserted",
+        "recorded",
+        "onset",
+        "offset",
+        "target",
+        "entity",
+        "detail",
+        "reason",
+        "performer",
     ];
 
     // Check if the element name starts with any of the known polymorphic bases
     // and has a capital letter after the base (indicating a type)
     for base in polymorphic_bases {
-        if element_name.starts_with(base) &&
-           element_name.len() > base.len() &&
-           element_name.chars().nth(base.len()).map_or(false, |c| c.is_uppercase()) {
+        if element_name.starts_with(base)
+            && element_name.len() > base.len()
+            && element_name
+                .chars()
+                .nth(base.len())
+                .map_or(false, |c| c.is_uppercase())
+        {
             return true;
         }
     }
@@ -127,7 +142,8 @@ fn convert_xml_to_json(xml_content: &str) -> Result<Value, Box<dyn std::error::E
 
     let mut buf = Vec::new();
     let mut json_obj = serde_json::Map::new();
-    let mut element_stack: Vec<(String, serde_json::Map<String, Value>, Option<String>)> = Vec::new();
+    let mut element_stack: Vec<(String, serde_json::Map<String, Value>, Option<String>)> =
+        Vec::new();
     let mut root_element_name = String::new();
     let mut in_root = false;
     let mut event_count = 0;
@@ -157,7 +173,10 @@ fn convert_xml_to_json(xml_content: &str) -> Result<Value, Box<dyn std::error::E
                 // Handle root element
                 if !in_root {
                     root_element_name = element_name.clone();
-                    json_obj.insert("resourceType".to_string(), Value::String(element_name.clone()));
+                    json_obj.insert(
+                        "resourceType".to_string(),
+                        Value::String(element_name.clone()),
+                    );
                     in_root = true;
                     // Push root element to stack so children can be processed
                     element_stack.push((element_name, current_obj, None));
@@ -170,10 +189,16 @@ fn convert_xml_to_json(xml_content: &str) -> Result<Value, Box<dyn std::error::E
                 let element_name = String::from_utf8(e.name().as_ref().to_vec())?;
                 // println!("[{}] END: {}", event_count, element_name);
 
-                if let Some((stack_element_name, mut current_obj, text_content)) = element_stack.pop() {
+                if let Some((stack_element_name, mut current_obj, text_content)) =
+                    element_stack.pop()
+                {
                     // Sanity check - element names should match
                     if stack_element_name != element_name {
-                        return Err(format!("XML structure error: expected {}, got {}", stack_element_name, element_name).into());
+                        return Err(format!(
+                            "XML structure error: expected {}, got {}",
+                            stack_element_name, element_name
+                        )
+                        .into());
                     }
 
                     // If this is the root element, process its children and break
@@ -206,16 +231,17 @@ fn convert_xml_to_json(xml_content: &str) -> Result<Value, Box<dyn std::error::E
                     }
 
                     // Determine the final value for this element
-                    let current_value = if current_obj.len() == 1 && current_obj.contains_key("value") {
-                        // For FHIR elements with only a "value" attribute, use the value directly
-                        current_obj.get("value").unwrap().clone()
-                    } else if current_obj.is_empty() {
-                        // For elements with no attributes or text content, create an empty object
-                        // They might still have child elements that will be added later
-                        Value::Object(current_obj)
-                    } else {
-                        Value::Object(current_obj)
-                    };
+                    let current_value =
+                        if current_obj.len() == 1 && current_obj.contains_key("value") {
+                            // For FHIR elements with only a "value" attribute, use the value directly
+                            current_obj.get("value").unwrap().clone()
+                        } else if current_obj.is_empty() {
+                            // For elements with no attributes or text content, create an empty object
+                            // They might still have child elements that will be added later
+                            Value::Object(current_obj)
+                        } else {
+                            Value::Object(current_obj)
+                        };
 
                     // Add to parent or root
                     if element_stack.is_empty() {
@@ -322,7 +348,8 @@ fn convert_xml_to_json(xml_content: &str) -> Result<Value, Box<dyn std::error::E
                 }
             }
             Ok(Event::Text(e)) => {
-                if let Some((_element_name, _current_obj, text_content)) = element_stack.last_mut() {
+                if let Some((_element_name, _current_obj, text_content)) = element_stack.last_mut()
+                {
                     let text = e.unescape()?.into_owned();
                     if !text.trim().is_empty() {
                         // Accumulate text content (in case there are multiple text nodes)
@@ -689,7 +716,10 @@ fn execute_test(test: &Test, input_data: &Value) -> Result<bool, Box<dyn std::er
             if items.len() != test.outputs.len() {
                 println!(
                     "Test FAILED: {} - Expression: {} - Expected {} items but got {}",
-                    test.name, expression, test.outputs.len(), items.len()
+                    test.name,
+                    expression,
+                    test.outputs.len(),
+                    items.len()
                 );
                 return Ok(false);
             }
@@ -805,7 +835,10 @@ fn test_input_file_loading() {
                 if let Some(name_array) = names.as_array() {
                     for name in name_array {
                         if let Some(given) = name.get("given") {
-                            println!("Given names: {}", serde_json::to_string_pretty(given).unwrap());
+                            println!(
+                                "Given names: {}",
+                                serde_json::to_string_pretty(given).unwrap()
+                            );
                         }
                     }
                 }
@@ -826,7 +859,6 @@ fn test_debug_xml_conversion() {
     let xml_path = "tests/official-tests/r4/input/patient-example.xml";
     match fs::read_to_string(xml_path) {
         Ok(xml_content) => {
-
             // Convert to JSON
             match convert_xml_to_json(&xml_content) {
                 Ok(json_result) => {
@@ -837,7 +869,10 @@ fn test_debug_xml_conversion() {
                     println!("\n=== Checking specific elements ===");
 
                     if let Some(resource_type) = json_result.get("resourceType") {
-                        println!("ResourceType: {}", serde_json::to_string_pretty(resource_type).unwrap());
+                        println!(
+                            "ResourceType: {}",
+                            serde_json::to_string_pretty(resource_type).unwrap()
+                        );
                     }
 
                     if let Some(id) = json_result.get("id") {
@@ -849,7 +884,10 @@ fn test_debug_xml_conversion() {
                     }
 
                     if let Some(telecom) = json_result.get("telecom") {
-                        println!("Telecom: {}", serde_json::to_string_pretty(telecom).unwrap());
+                        println!(
+                            "Telecom: {}",
+                            serde_json::to_string_pretty(telecom).unwrap()
+                        );
                     }
 
                     if let Some(text) = json_result.get("text") {
@@ -919,7 +957,8 @@ fn run_official_fhirpath_tests() {
     let mut skipped = 0;
 
     // Track failures by group and expression pattern
-    let mut failures_by_group: std::collections::HashMap<String, Vec<(String, String, String)>> = std::collections::HashMap::new();
+    let mut failures_by_group: std::collections::HashMap<String, Vec<(String, String, String)>> =
+        std::collections::HashMap::new();
     let mut datetime_failures = 0;
     let mut conversion_failures = 0;
     let mut collection_failures = 0;
@@ -958,20 +997,45 @@ fn run_official_fhirpath_tests() {
                         group_failures.push((test.name.clone(), expr.clone(), expected.clone()));
 
                         // Categorize failure type
-                        if expr.contains("DateTime") || expr.contains("Date") || expr.contains("Time") ||
-                           expr.contains("today") || expr.contains("now") || expr.starts_with("@") {
+                        if expr.contains("DateTime")
+                            || expr.contains("Date")
+                            || expr.contains("Time")
+                            || expr.contains("today")
+                            || expr.contains("now")
+                            || expr.starts_with("@")
+                        {
                             datetime_failures += 1;
-                        } else if expr.contains("convertsTo") || expr.contains(".as(") || expr.contains(".is(") {
+                        } else if expr.contains("convertsTo")
+                            || expr.contains(".as(")
+                            || expr.contains(".is(")
+                        {
                             conversion_failures += 1;
-                        } else if expr.contains("first") || expr.contains("last") || expr.contains("tail") ||
-                                 expr.contains("skip") || expr.contains("take") || expr.contains("where") ||
-                                 expr.contains("select") || expr.contains("all") || expr.contains("any") {
+                        } else if expr.contains("first")
+                            || expr.contains("last")
+                            || expr.contains("tail")
+                            || expr.contains("skip")
+                            || expr.contains("take")
+                            || expr.contains("where")
+                            || expr.contains("select")
+                            || expr.contains("all")
+                            || expr.contains("any")
+                        {
                             collection_failures += 1;
-                        } else if expr.contains("+") || expr.contains("-") || expr.contains("*") ||
-                                 expr.contains("/") || expr.contains("div") || expr.contains("mod") {
+                        } else if expr.contains("+")
+                            || expr.contains("-")
+                            || expr.contains("*")
+                            || expr.contains("/")
+                            || expr.contains("div")
+                            || expr.contains("mod")
+                        {
                             math_failures += 1;
-                        } else if expr.contains("=") || expr.contains(">") || expr.contains("<") ||
-                                 expr.contains("!=") || expr.contains("<=") || expr.contains(">=") {
+                        } else if expr.contains("=")
+                            || expr.contains(">")
+                            || expr.contains("<")
+                            || expr.contains("!=")
+                            || expr.contains("<=")
+                            || expr.contains(">=")
+                        {
                             comparison_failures += 1;
                         } else {
                             other_failures += 1;
@@ -983,7 +1047,11 @@ fn run_official_fhirpath_tests() {
                         println!("  ✗ {} (Error: {:?})", test.name, e);
 
                         // Store error details
-                        group_failures.push((test.name.clone(), test.expression.text.clone(), format!("ERROR: {:?}", e)));
+                        group_failures.push((
+                            test.name.clone(),
+                            test.expression.text.clone(),
+                            format!("ERROR: {:?}", e),
+                        ));
                     }
                 },
                 Err(e) => {
@@ -999,8 +1067,10 @@ fn run_official_fhirpath_tests() {
             failures_by_group.insert(group.name.clone(), group_failures);
         }
 
-        println!("  Group summary: {} passed, {} failed, {} skipped",
-                 group_passed, group_failed, group_skipped);
+        println!(
+            "  Group summary: {} passed, {} failed, {} skipped",
+            group_passed, group_failed, group_skipped
+        );
     }
 
     println!("\nTest Results by Group:");
@@ -1012,8 +1082,13 @@ fn run_official_fhirpath_tests() {
 
         // Print a few examples of failures from this group
         for (i, (test_name, expr, expected)) in failures.iter().take(3).enumerate() {
-            println!("  Example {}: Test '{}' - Expression: {} - Expected: {}",
-                     i+1, test_name, expr, expected);
+            println!(
+                "  Example {}: Test '{}' - Expression: {} - Expected: {}",
+                i + 1,
+                test_name,
+                expr,
+                expected
+            );
         }
     }
 
@@ -1030,5 +1105,8 @@ fn run_official_fhirpath_tests() {
     println!("Failed: {}", failed);
     println!("Skipped: {}", skipped);
     println!("Total: {}", passed + failed + skipped);
-    println!("Success rate: {:.2}%", (passed as f64 / (passed + failed) as f64) * 100.0);
+    println!(
+        "Success rate: {:.2}%",
+        (passed as f64 / (passed + failed) as f64) * 100.0
+    );
 }

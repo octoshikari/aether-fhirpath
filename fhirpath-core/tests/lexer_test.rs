@@ -237,7 +237,12 @@ fn test_integer_method_call_tokenization() {
         }
 
         // All expressions should have at least: literal, dot, identifier, left_paren, right_paren, EOF
-        assert!(tokens.len() >= 6, "Expected at least 6 tokens for {}, got {}", expr, tokens.len());
+        assert!(
+            tokens.len() >= 6,
+            "Expected at least 6 tokens for {}, got {}",
+            expr,
+            tokens.len()
+        );
 
         // Check that we have a dot token
         let has_dot = tokens.iter().any(|t| t.token_type == TokenType::Dot);
@@ -245,7 +250,11 @@ fn test_integer_method_call_tokenization() {
 
         // Check that we have the function name
         let has_converts = tokens.iter().any(|t| t.lexeme == "convertsToInteger");
-        assert!(has_converts, "Expected 'convertsToInteger' identifier in {}", expr);
+        assert!(
+            has_converts,
+            "Expected 'convertsToInteger' identifier in {}",
+            expr
+        );
     }
 }
 

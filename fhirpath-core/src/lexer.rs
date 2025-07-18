@@ -228,7 +228,8 @@ impl<'a> Lexer<'a> {
                     // End of input after decimal point - not a valid decimal
                     return Err(FhirPathError::LexerError(format!(
                         "Expected digit after decimal point at line {}, column {}",
-                        self.line, self.column + 1
+                        self.line,
+                        self.column + 1
                     )));
                 }
             } else {

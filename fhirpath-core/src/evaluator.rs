@@ -48,9 +48,18 @@ impl EvaluationContext {
         let mut variables = HashMap::new();
 
         // Standard FHIRPath variables
-        variables.insert("sct".to_string(), FhirPathValue::String("http://snomed.info/sct".to_string()));
-        variables.insert("loinc".to_string(), FhirPathValue::String("http://loinc.org".to_string()));
-        variables.insert("ucum".to_string(), FhirPathValue::String("http://unitsofmeasure.org".to_string()));
+        variables.insert(
+            "sct".to_string(),
+            FhirPathValue::String("http://snomed.info/sct".to_string()),
+        );
+        variables.insert(
+            "loinc".to_string(),
+            FhirPathValue::String("http://loinc.org".to_string()),
+        );
+        variables.insert(
+            "ucum".to_string(),
+            FhirPathValue::String("http://unitsofmeasure.org".to_string()),
+        );
 
         variables
     }
@@ -449,8 +458,11 @@ fn evaluate_ast_internal_uncached(
                                             total,
                                         )?;
 
-                                        let result =
-                                            evaluate_ast_with_visitor(right, &new_context, visitor)?;
+                                        let result = evaluate_ast_with_visitor(
+                                            right,
+                                            &new_context,
+                                            visitor,
+                                        )?;
                                         if result != FhirPathValue::Empty {
                                             match result {
                                                 FhirPathValue::Collection(mut inner_items) => {
@@ -464,13 +476,19 @@ fn evaluate_ast_internal_uncached(
                                     _ => {
                                         // For non-resource items, try to evaluate if they have properties
                                         // This allows for handling primitive types with methods
-                                        let new_context =
-                                            context.create_iteration_context(item.clone(), idx, total)?;
+                                        let new_context = context.create_iteration_context(
+                                            item.clone(),
+                                            idx,
+                                            total,
+                                        )?;
 
                                         // Only try to evaluate if the right side is an identifier (method call)
                                         if let AstNode::Identifier(_) = **right {
-                                            let result =
-                                                evaluate_ast_with_visitor(right, &new_context, visitor)?;
+                                            let result = evaluate_ast_with_visitor(
+                                                right,
+                                                &new_context,
+                                                visitor,
+                                            )?;
                                             if result != FhirPathValue::Empty {
                                                 results.push(result);
                                             }
@@ -579,10 +597,14 @@ fn evaluate_ast_internal_uncached(
 
             // Perform the operation
             match op {
-                BinaryOperator::Equals => Ok(FhirPathValue::Boolean(values_equal(&left_result, &right_result))),
-                BinaryOperator::NotEquals => {
-                    Ok(FhirPathValue::Boolean(!values_equal(&left_result, &right_result)))
-                }
+                BinaryOperator::Equals => Ok(FhirPathValue::Boolean(values_equal(
+                    &left_result,
+                    &right_result,
+                ))),
+                BinaryOperator::NotEquals => Ok(FhirPathValue::Boolean(!values_equal(
+                    &left_result,
+                    &right_result,
+                ))),
                 BinaryOperator::LessThan => {
                     compare_values(&left_result, &right_result, |a, b| a < b)
                 }
@@ -705,9 +727,12 @@ fn evaluate_ast_internal_uncached(
                         FhirPathValue::Boolean(b) => b.to_string(),
                         FhirPathValue::Empty => String::new(),
                         FhirPathValue::Collection(ref items) if items.is_empty() => String::new(),
-                        _ => return Err(FhirPathError::TypeError(
-                            "Cannot convert left operand to string for concatenation".to_string(),
-                        )),
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "Cannot convert left operand to string for concatenation"
+                                    .to_string(),
+                            ))
+                        }
                     };
 
                     let right_str = match right_result {
@@ -717,9 +742,12 @@ fn evaluate_ast_internal_uncached(
                         FhirPathValue::Boolean(b) => b.to_string(),
                         FhirPathValue::Empty => String::new(),
                         FhirPathValue::Collection(ref items) if items.is_empty() => String::new(),
-                        _ => return Err(FhirPathError::TypeError(
-                            "Cannot convert right operand to string for concatenation".to_string(),
-                        )),
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "Cannot convert right operand to string for concatenation"
+                                    .to_string(),
+                            ))
+                        }
                     };
 
                     Ok(FhirPathValue::String(format!("{}{}", left_str, right_str)))
@@ -936,7 +964,7 @@ pub fn evaluate_expression_with_visitor(
     let wrapped_result = match result {
         FhirPathValue::Collection(_) => result, // Already a collection
         FhirPathValue::Empty => FhirPathValue::Collection(vec![]), // Empty collection
-        other => other, // Wrap single value in collection
+        other => other,                         // Wrap single value in collection
     };
 
     Ok(wrapped_result)
@@ -1145,7 +1173,11 @@ where
         // Date to DateTime comparisons
         (FhirPathValue::Date(a), FhirPathValue::DateTime(b)) => {
             // Convert date to datetime by adding T00:00:00
-            let a_as_datetime = if a.contains('T') { a.clone() } else { format!("{}T00:00:00", a) };
+            let a_as_datetime = if a.contains('T') {
+                a.clone()
+            } else {
+                format!("{}T00:00:00", a)
+            };
             let normalized_a = normalize_datetime(&a_as_datetime);
             let normalized_b = normalize_datetime(b);
             Ok(FhirPathValue::Boolean(compare_fn(
@@ -1155,7 +1187,11 @@ where
         }
         (FhirPathValue::DateTime(a), FhirPathValue::Date(b)) => {
             // Convert date to datetime by adding T00:00:00
-            let b_as_datetime = if b.contains('T') { b.clone() } else { format!("{}T00:00:00", b) };
+            let b_as_datetime = if b.contains('T') {
+                b.clone()
+            } else {
+                format!("{}T00:00:00", b)
+            };
             let normalized_a = normalize_datetime(a);
             let normalized_b = normalize_datetime(&b_as_datetime);
             Ok(FhirPathValue::Boolean(compare_fn(
@@ -1166,8 +1202,14 @@ where
 
         // Quantity comparisons
         (
-            FhirPathValue::Quantity { value: v1, unit: u1 },
-            FhirPathValue::Quantity { value: v2, unit: u2 },
+            FhirPathValue::Quantity {
+                value: v1,
+                unit: u1,
+            },
+            FhirPathValue::Quantity {
+                value: v2,
+                unit: u2,
+            },
         ) => {
             // For now, only compare quantities with the same unit
             if u1 == u2 {
@@ -1222,20 +1264,26 @@ where
 
                     // Quantity comparisons
                     (
-                        FhirPathValue::Quantity { value: v1, unit: u1 },
-                        FhirPathValue::Quantity { value: v2, unit: u2 },
+                        FhirPathValue::Quantity {
+                            value: v1,
+                            unit: u1,
+                        },
+                        FhirPathValue::Quantity {
+                            value: v2,
+                            unit: u2,
+                        },
                     ) => u1 == u2 && v1 == v2,
 
                     // For nested collections, we can't do a deep comparison without recursion
                     // So we'll just compare if they're both collections with the same length
                     (FhirPathValue::Collection(c1), FhirPathValue::Collection(c2)) => {
                         c1.len() == c2.len()
-                    },
+                    }
 
                     // For resources, compare their JSON representations
                     (FhirPathValue::Resource(r1), FhirPathValue::Resource(r2)) => {
                         r1.to_json() == r2.to_json()
-                    },
+                    }
 
                     // Different types are not equal
                     _ => false,
@@ -1295,9 +1343,10 @@ where
         }
 
         // Fallback for incompatible types
-        _ => Err(FhirPathError::TypeError(
-            format!("Comparison requires compatible operands: {:?} and {:?}", left, right),
-        )),
+        _ => Err(FhirPathError::TypeError(format!(
+            "Comparison requires compatible operands: {:?} and {:?}",
+            left, right
+        ))),
     }
 }
 
@@ -1398,29 +1447,22 @@ fn divide_values(
 }
 
 /// Helper function for modulo operation
-fn mod_values(
-    left: &FhirPathValue,
-    right: &FhirPathValue,
-) -> Result<FhirPathValue, FhirPathError> {
+fn mod_values(left: &FhirPathValue, right: &FhirPathValue) -> Result<FhirPathValue, FhirPathError> {
     match (left, right) {
-        (_, FhirPathValue::Integer(b)) if *b == 0 => Err(FhirPathError::EvaluationError(
-            "Modulo by zero".to_string(),
-        )),
-        (_, FhirPathValue::Decimal(b)) if *b == 0.0 => Err(FhirPathError::EvaluationError(
-            "Modulo by zero".to_string(),
-        )),
-        (FhirPathValue::Integer(a), FhirPathValue::Integer(b)) => {
-            Ok(FhirPathValue::Integer(a % b))
+        (_, FhirPathValue::Integer(b)) if *b == 0 => {
+            Err(FhirPathError::EvaluationError("Modulo by zero".to_string()))
         }
+        (_, FhirPathValue::Decimal(b)) if *b == 0.0 => {
+            Err(FhirPathError::EvaluationError("Modulo by zero".to_string()))
+        }
+        (FhirPathValue::Integer(a), FhirPathValue::Integer(b)) => Ok(FhirPathValue::Integer(a % b)),
         (FhirPathValue::Integer(a), FhirPathValue::Decimal(b)) => {
             Ok(FhirPathValue::Decimal((*a as f64) % b))
         }
         (FhirPathValue::Decimal(a), FhirPathValue::Integer(b)) => {
             Ok(FhirPathValue::Decimal(a % (*b as f64)))
         }
-        (FhirPathValue::Decimal(a), FhirPathValue::Decimal(b)) => {
-            Ok(FhirPathValue::Decimal(a % b))
-        }
+        (FhirPathValue::Decimal(a), FhirPathValue::Decimal(b)) => Ok(FhirPathValue::Decimal(a % b)),
         _ => Err(FhirPathError::TypeError(
             "Modulo requires numeric operands".to_string(),
         )),
@@ -1790,10 +1832,10 @@ fn evaluate_exists_function(
         match get_current_collection(context) {
             Ok(collection) => {
                 if collection.len() == 1 && collection[0] == FhirPathValue::Empty {
-                    return Ok(FhirPathValue::Boolean(false))
+                    return Ok(FhirPathValue::Boolean(false));
                 }
                 Ok(FhirPathValue::Boolean(!collection.is_empty()))
-            },
+            }
             Err(_) => Ok(FhirPathValue::Boolean(false)),
         }
     } else {
@@ -2033,7 +2075,8 @@ fn evaluate_is_function(
                 }
                 _ => {
                     return Err(FhirPathError::EvaluationError(
-                        "'is' function expects a type name or qualified type name as argument".to_string(),
+                        "'is' function expects a type name or qualified type name as argument"
+                            .to_string(),
                     ))
                 }
             }
@@ -2075,7 +2118,9 @@ fn evaluate_is_function(
                     resource_type == type_name || format!("FHIR.{}", resource_type) == type_name
                 } else {
                     // Generic resource type check
-                    type_name == "Resource" || type_name == "resource" || type_name == "FHIR.Resource"
+                    type_name == "Resource"
+                        || type_name == "resource"
+                        || type_name == "FHIR.Resource"
                 }
             }
             _ => false,
@@ -2146,46 +2191,40 @@ fn evaluate_as_function(
         // If direct type matching fails, try conversion
         let converted_value = match (item, type_name.as_str()) {
             // String to DateTime/Date/Time conversion
-            (FhirPathValue::String(s), "dateTime") |
-            (FhirPathValue::String(s), "date") |
-            (FhirPathValue::String(s), "time") => {
+            (FhirPathValue::String(s), "dateTime")
+            | (FhirPathValue::String(s), "date")
+            | (FhirPathValue::String(s), "time") => {
                 if let Some(dt_value) = string_to_datetime(s) {
                     // Only add if the converted type matches the requested type
                     match (dt_value.clone(), type_name.as_str()) {
-                        (FhirPathValue::DateTime(_), "dateTime") |
-                        (FhirPathValue::Date(_), "date") |
-                        (FhirPathValue::Time(_), "time") => Some(dt_value),
-                        _ => None
+                        (FhirPathValue::DateTime(_), "dateTime")
+                        | (FhirPathValue::Date(_), "date")
+                        | (FhirPathValue::Time(_), "time") => Some(dt_value),
+                        _ => None,
                     }
                 } else {
                     None
                 }
-            },
+            }
             // String to Integer conversion
             (FhirPathValue::String(s), "integer") => {
                 s.parse::<i64>().ok().map(FhirPathValue::Integer)
-            },
+            }
             // String to Decimal conversion
             (FhirPathValue::String(s), "decimal") => {
                 s.parse::<f64>().ok().map(FhirPathValue::Decimal)
-            },
+            }
             // String to Boolean conversion
-            (FhirPathValue::String(s), "boolean") => {
-                match s.to_lowercase().as_str() {
-                    "true" => Some(FhirPathValue::Boolean(true)),
-                    "false" => Some(FhirPathValue::Boolean(false)),
-                    _ => None
-                }
+            (FhirPathValue::String(s), "boolean") => match s.to_lowercase().as_str() {
+                "true" => Some(FhirPathValue::Boolean(true)),
+                "false" => Some(FhirPathValue::Boolean(false)),
+                _ => None,
             },
             // Integer to Decimal conversion
-            (FhirPathValue::Integer(i), "decimal") => {
-                Some(FhirPathValue::Decimal(*i as f64))
-            },
+            (FhirPathValue::Integer(i), "decimal") => Some(FhirPathValue::Decimal(*i as f64)),
             // Decimal to Integer conversion (truncates)
-            (FhirPathValue::Decimal(d), "integer") => {
-                Some(FhirPathValue::Integer(*d as i64))
-            },
-            _ => None
+            (FhirPathValue::Decimal(d), "integer") => Some(FhirPathValue::Integer(*d as i64)),
+            _ => None,
         };
 
         if let Some(value) = converted_value {
@@ -2464,9 +2503,11 @@ fn evaluate_join_function(
 
     let separator = match separator_result {
         FhirPathValue::String(s) => s,
-        _ => return Err(FhirPathError::TypeError(
-            "'join' function separator argument must be a string".to_string(),
-        )),
+        _ => {
+            return Err(FhirPathError::TypeError(
+                "'join' function separator argument must be a string".to_string(),
+            ))
+        }
     };
 
     // Handle empty collection case
@@ -2504,9 +2545,11 @@ fn evaluate_abs_function(
             match item {
                 FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i.abs())),
                 FhirPathValue::Decimal(d) => results.push(FhirPathValue::Decimal(d.abs())),
-                _ => return Err(FhirPathError::TypeError(
-                    "'abs' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'abs' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2527,16 +2570,20 @@ fn evaluate_abs_function(
                     match item {
                         FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i.abs())),
                         FhirPathValue::Decimal(d) => results.push(FhirPathValue::Decimal(d.abs())),
-                        _ => return Err(FhirPathError::TypeError(
-                            "'abs' function can only be applied to numbers".to_string(),
-                        )),
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'abs' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'abs' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'abs' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -2563,9 +2610,11 @@ fn evaluate_ceiling_function(
             match item {
                 FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
                 FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.ceil() as i64)),
-                _ => return Err(FhirPathError::TypeError(
-                    "'ceiling' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'ceiling' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2585,17 +2634,23 @@ fn evaluate_ceiling_function(
                 for item in items {
                     match item {
                         FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
-                        FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.ceil() as i64)),
-                        _ => return Err(FhirPathError::TypeError(
-                            "'ceiling' function can only be applied to numbers".to_string(),
-                        )),
+                        FhirPathValue::Decimal(d) => {
+                            results.push(FhirPathValue::Integer(d.ceil() as i64))
+                        }
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'ceiling' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'ceiling' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'ceiling' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -2622,9 +2677,11 @@ fn evaluate_floor_function(
             match item {
                 FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
                 FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.floor() as i64)),
-                _ => return Err(FhirPathError::TypeError(
-                    "'floor' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'floor' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2644,17 +2701,23 @@ fn evaluate_floor_function(
                 for item in items {
                     match item {
                         FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
-                        FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.floor() as i64)),
-                        _ => return Err(FhirPathError::TypeError(
-                            "'floor' function can only be applied to numbers".to_string(),
-                        )),
+                        FhirPathValue::Decimal(d) => {
+                            results.push(FhirPathValue::Integer(d.floor() as i64))
+                        }
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'floor' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'floor' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'floor' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -2681,9 +2744,11 @@ fn evaluate_round_function(
             match item {
                 FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
                 FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.round() as i64)),
-                _ => return Err(FhirPathError::TypeError(
-                    "'round' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'round' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2703,17 +2768,23 @@ fn evaluate_round_function(
                 for item in items {
                     match item {
                         FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
-                        FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.round() as i64)),
-                        _ => return Err(FhirPathError::TypeError(
-                            "'round' function can only be applied to numbers".to_string(),
-                        )),
+                        FhirPathValue::Decimal(d) => {
+                            results.push(FhirPathValue::Integer(d.round() as i64))
+                        }
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'round' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'round' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'round' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -2756,9 +2827,11 @@ fn evaluate_sqrt_function(
                         results.push(FhirPathValue::Decimal(d.sqrt()));
                     }
                 }
-                _ => return Err(FhirPathError::TypeError(
-                    "'sqrt' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'sqrt' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2811,16 +2884,20 @@ fn evaluate_sqrt_function(
                                 results.push(FhirPathValue::Decimal(d.sqrt()));
                             }
                         }
-                        _ => return Err(FhirPathError::TypeError(
-                            "'sqrt' function can only be applied to numbers".to_string(),
-                        )),
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'sqrt' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'sqrt' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'sqrt' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -2847,9 +2924,11 @@ fn evaluate_exp_function(
             match item {
                 FhirPathValue::Integer(i) => results.push(FhirPathValue::Decimal((i as f64).exp())),
                 FhirPathValue::Decimal(d) => results.push(FhirPathValue::Decimal(d.exp())),
-                _ => return Err(FhirPathError::TypeError(
-                    "'exp' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'exp' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2868,18 +2947,24 @@ fn evaluate_exp_function(
                 let mut results = Vec::new();
                 for item in items {
                     match item {
-                        FhirPathValue::Integer(i) => results.push(FhirPathValue::Decimal((i as f64).exp())),
+                        FhirPathValue::Integer(i) => {
+                            results.push(FhirPathValue::Decimal((i as f64).exp()))
+                        }
                         FhirPathValue::Decimal(d) => results.push(FhirPathValue::Decimal(d.exp())),
-                        _ => return Err(FhirPathError::TypeError(
-                            "'exp' function can only be applied to numbers".to_string(),
-                        )),
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'exp' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'exp' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'exp' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -2922,9 +3007,11 @@ fn evaluate_ln_function(
                         results.push(FhirPathValue::Decimal(d.ln()));
                     }
                 }
-                _ => return Err(FhirPathError::TypeError(
-                    "'ln' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'ln' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -2977,16 +3064,20 @@ fn evaluate_ln_function(
                                 results.push(FhirPathValue::Decimal(d.ln()));
                             }
                         }
-                        _ => return Err(FhirPathError::TypeError(
-                            "'ln' function can only be applied to numbers".to_string(),
-                        )),
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'ln' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'ln' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'ln' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -3011,7 +3102,8 @@ fn evaluate_log_function(
                 FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
                 FhirPathValue::Collection(_) => {
                     return Err(FhirPathError::EvaluationError(
-                        "'log' function cannot be applied to collections with multiple items".to_string(),
+                        "'log' function cannot be applied to collections with multiple items"
+                            .to_string(),
                     ));
                 }
                 other => other.clone(),
@@ -3040,9 +3132,11 @@ fn evaluate_log_function(
         (FhirPathValue::Integer(v), FhirPathValue::Decimal(b)) => (v as f64, b),
         (FhirPathValue::Decimal(v), FhirPathValue::Integer(b)) => (v, b as f64),
         (FhirPathValue::Decimal(v), FhirPathValue::Decimal(b)) => (v, b),
-        _ => return Err(FhirPathError::TypeError(
-            "'log' function can only be applied to numbers".to_string(),
-        )),
+        _ => {
+            return Err(FhirPathError::TypeError(
+                "'log' function can only be applied to numbers".to_string(),
+            ))
+        }
     };
 
     if value_f64 <= 0.0 {
@@ -3075,7 +3169,8 @@ fn evaluate_power_function(
                 FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
                 FhirPathValue::Collection(_) => {
                     return Err(FhirPathError::EvaluationError(
-                        "'power' function cannot be applied to collections with multiple items".to_string(),
+                        "'power' function cannot be applied to collections with multiple items"
+                            .to_string(),
                     ));
                 }
                 other => other.clone(),
@@ -3133,9 +3228,11 @@ fn evaluate_truncate_function(
             match item {
                 FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
                 FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.trunc() as i64)),
-                _ => return Err(FhirPathError::TypeError(
-                    "'truncate' function can only be applied to numbers".to_string(),
-                )),
+                _ => {
+                    return Err(FhirPathError::TypeError(
+                        "'truncate' function can only be applied to numbers".to_string(),
+                    ))
+                }
             }
         }
 
@@ -3155,17 +3252,23 @@ fn evaluate_truncate_function(
                 for item in items {
                     match item {
                         FhirPathValue::Integer(i) => results.push(FhirPathValue::Integer(i)),
-                        FhirPathValue::Decimal(d) => results.push(FhirPathValue::Integer(d.trunc() as i64)),
-                        _ => return Err(FhirPathError::TypeError(
-                            "'truncate' function can only be applied to numbers".to_string(),
-                        )),
+                        FhirPathValue::Decimal(d) => {
+                            results.push(FhirPathValue::Integer(d.trunc() as i64))
+                        }
+                        _ => {
+                            return Err(FhirPathError::TypeError(
+                                "'truncate' function can only be applied to numbers".to_string(),
+                            ))
+                        }
                     }
                 }
                 FhirPathValue::Collection(results)
-            },
-            _ => return Err(FhirPathError::TypeError(
-                "'truncate' function can only be applied to numbers".to_string(),
-            )),
+            }
+            _ => {
+                return Err(FhirPathError::TypeError(
+                    "'truncate' function can only be applied to numbers".to_string(),
+                ))
+            }
         }
     } else {
         return Err(FhirPathError::EvaluationError(format!(
@@ -3190,7 +3293,8 @@ fn evaluate_type_function(
                 FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
                 FhirPathValue::Collection(_) => {
                     return Err(FhirPathError::EvaluationError(
-                        "'type' function cannot be applied to collections with multiple items".to_string(),
+                        "'type' function cannot be applied to collections with multiple items"
+                            .to_string(),
                     ));
                 }
                 other => other.clone(),
@@ -3232,8 +3336,14 @@ fn evaluate_type_function(
 
     // Create a type object with namespace and name properties
     let mut type_properties = std::collections::HashMap::new();
-    type_properties.insert("namespace".to_string(), serde_json::Value::String(namespace.to_string()));
-    type_properties.insert("name".to_string(), serde_json::Value::String(name.to_string()));
+    type_properties.insert(
+        "namespace".to_string(),
+        serde_json::Value::String(namespace.to_string()),
+    );
+    type_properties.insert(
+        "name".to_string(),
+        serde_json::Value::String(name.to_string()),
+    );
 
     let type_resource = FhirResource {
         resource_type: None,
@@ -3480,7 +3590,8 @@ fn evaluate_not_function(
                 FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
                 FhirPathValue::Collection(_) => {
                     return Err(FhirPathError::EvaluationError(
-                        "'not' function cannot be applied to collections with multiple items".to_string(),
+                        "'not' function cannot be applied to collections with multiple items"
+                            .to_string(),
                     ));
                 }
                 other => other.clone(),
@@ -3538,7 +3649,8 @@ fn evaluate_all_function(
         let mut iteration_context = context.create_iteration_context(item, idx, total)?;
 
         // Evaluate the condition expression
-        let condition_result = evaluate_ast_with_visitor(&arguments[0], &iteration_context, visitor)?;
+        let condition_result =
+            evaluate_ast_with_visitor(&arguments[0], &iteration_context, visitor)?;
 
         // Check if the condition is truthy
         if !is_truthy(&condition_result) {
@@ -3596,7 +3708,7 @@ fn evaluate_any_true_function(
             FhirPathValue::Boolean(true) => return Ok(FhirPathValue::Boolean(true)),
             FhirPathValue::Boolean(false) => continue,
             FhirPathValue::Empty => continue, // Empty values are ignored
-            _ => continue, // Non-boolean values are ignored for anyTrue
+            _ => continue,                    // Non-boolean values are ignored for anyTrue
         }
     }
 
@@ -3650,7 +3762,7 @@ fn evaluate_any_false_function(
             FhirPathValue::Boolean(false) => return Ok(FhirPathValue::Boolean(true)),
             FhirPathValue::Boolean(true) => continue,
             FhirPathValue::Empty => continue, // Empty values are ignored
-            _ => continue, // Non-boolean values are ignored for anyFalse
+            _ => continue,                    // Non-boolean values are ignored for anyFalse
         }
     }
 
@@ -3747,12 +3859,13 @@ fn evaluate_converts_to_boolean_function(
         FhirPathValue::String(s) => s == "true" || s == "false",
         FhirPathValue::Integer(i) => i == 0 || i == 1,
         FhirPathValue::Collection(ref items) => {
-            items.len() == 1 && match &items[0] {
-                FhirPathValue::Boolean(_) => true,
-                FhirPathValue::String(s) => s == "true" || s == "false",
-                FhirPathValue::Integer(i) => *i == 0 || *i == 1,
-                _ => false,
-            }
+            items.len() == 1
+                && match &items[0] {
+                    FhirPathValue::Boolean(_) => true,
+                    FhirPathValue::String(s) => s == "true" || s == "false",
+                    FhirPathValue::Integer(i) => *i == 0 || *i == 1,
+                    _ => false,
+                }
         }
         _ => false,
     };
@@ -3792,12 +3905,13 @@ fn evaluate_converts_to_decimal_function(
         FhirPathValue::Integer(_) => true,
         FhirPathValue::String(s) => s.parse::<f64>().is_ok(),
         FhirPathValue::Collection(ref items) => {
-            items.len() == 1 && match &items[0] {
-                FhirPathValue::Decimal(_) => true,
-                FhirPathValue::Integer(_) => true,
-                FhirPathValue::String(s) => s.parse::<f64>().is_ok(),
-                _ => false,
-            }
+            items.len() == 1
+                && match &items[0] {
+                    FhirPathValue::Decimal(_) => true,
+                    FhirPathValue::Integer(_) => true,
+                    FhirPathValue::String(s) => s.parse::<f64>().is_ok(),
+                    _ => false,
+                }
         }
         _ => false,
     };
@@ -3865,7 +3979,7 @@ fn evaluate_converts_to_date_time_function(
         FhirPathValue::DateTime(_) => true,
         FhirPathValue::Date(_) => true,
         FhirPathValue::String(s) => is_valid_datetime_string(&s),
-        _ => false
+        _ => false,
     };
 
     Ok(FhirPathValue::Boolean(can_convert))
@@ -4100,7 +4214,9 @@ fn is_valid_time_string(s: &str) -> bool {
                 if s.len() > 9 && s.chars().nth(8) == Some('.') {
                     let ms_part = &s[9..];
                     // Check if all remaining characters are digits (before timezone)
-                    let ms_end = ms_part.find(|c| c == 'Z' || c == '+' || c == '-').unwrap_or(ms_part.len());
+                    let ms_end = ms_part
+                        .find(|c| c == 'Z' || c == '+' || c == '-')
+                        .unwrap_or(ms_part.len());
                     if !ms_part[..ms_end].chars().all(|c| c.is_ascii_digit()) {
                         return false;
                     }

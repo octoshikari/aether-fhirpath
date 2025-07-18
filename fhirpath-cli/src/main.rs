@@ -362,21 +362,33 @@ fn format_ast_as_tree(node: &AstNode, indent: usize) -> String {
             if !arguments.is_empty() {
                 result.push_str(&format!("{}Arguments:\n", indent_str));
                 for (i, arg) in arguments.iter().enumerate() {
-                    let prefix = if i == arguments.len() - 1 { "└─" } else { "├─" };
+                    let prefix = if i == arguments.len() - 1 {
+                        "└─"
+                    } else {
+                        "├─"
+                    };
                     result.push_str(&format!("{}{} Arg {}:\n", indent_str, prefix, i + 1));
                     result.push_str(&format_ast_as_tree(arg, indent + 2));
                 }
             }
         }
         AstNode::BinaryOp { op, left, right } => {
-            result.push_str(&format!("{}BinaryOp: {}\n", indent_str, format_binary_operator(op)));
+            result.push_str(&format!(
+                "{}BinaryOp: {}\n",
+                indent_str,
+                format_binary_operator(op)
+            ));
             result.push_str(&format!("{}├─ Left:\n", indent_str));
             result.push_str(&format_ast_as_tree(left, indent + 2));
             result.push_str(&format!("{}└─ Right:\n", indent_str));
             result.push_str(&format_ast_as_tree(right, indent + 2));
         }
         AstNode::UnaryOp { op, operand } => {
-            result.push_str(&format!("{}UnaryOp: {}\n", indent_str, format_unary_operator(op)));
+            result.push_str(&format!(
+                "{}UnaryOp: {}\n",
+                indent_str,
+                format_unary_operator(op)
+            ));
             result.push_str(&format!("{}└─ Operand:\n", indent_str));
             result.push_str(&format_ast_as_tree(operand, indent + 2));
         }

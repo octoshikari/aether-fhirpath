@@ -458,7 +458,9 @@ impl<'a> Parser<'a> {
                         let identifier = &current_token.lexeme;
 
                         // Allow single-character identifiers like 'T'
-                        if identifier.len() == 1 && identifier.chars().next().unwrap().is_alphabetic() {
+                        if identifier.len() == 1
+                            && identifier.chars().next().unwrap().is_alphabetic()
+                        {
                             self.advance();
                             datetime_str.push_str(&self.previous().lexeme);
                         }
