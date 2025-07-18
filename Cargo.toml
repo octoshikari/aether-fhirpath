@@ -9,7 +9,7 @@ members = [
 
 [workspace.package]
 version = "0.1.1"
-edition = "2024"
+edition = "2021"
 authors = ["Aether FHIRPath Team <funyloony@gmail.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/octoshikari/aether-fhirpath"

@@ -29,7 +29,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: ${{ matrix.rust }}
+        toolchain: stable
         components: rustfmt, clippy
 
     - name: Cache dependencies
@@ -110,7 +110,7 @@ jobs:
         path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
   build-node-bindings:
-    name: stable - ${{ matrix.settings.target }} - node@20
+    name: stable - ${{ matrix.settings.target }} - node@22
     needs: test
     runs-on: ${{ matrix.settings.host }}
     strategy:
@@ -163,7 +163,7 @@ jobs:
         uses: actions/setup-node@v4
         if: ${{ !matrix.settings.docker }}
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: fhirpath-node/package.json
 
@@ -275,7 +275,7 @@ jobs:
     - name: Setup node
       uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: 22
         registry-url: https://registry.npmjs.org/
 
     - name: Download all artifacts
