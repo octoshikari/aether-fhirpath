@@ -113,13 +113,14 @@ jobs:
             target: x86_64-apple-darwin
             build: |
               cd fhirpath-node
-              npm run build
+              npm run build --target x86_64-apple-darwin
               cp index.js index.cjs
-              strip -x *.node
+              if ls *.node 1> /dev/null 2>&1; then strip -x *.node; fi
           - host: windows-latest
+            target: x86_64-pc-windows-msvc
             build: |
               cd fhirpath-node
-              npm run build
+              npm run build --target x86_64-pc-windows-msvc
               cp index.js index.cjs
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
@@ -128,15 +129,24 @@ jobs:
               set -e &&
               cd fhirpath-node &&
               npm run build --target x86_64-unknown-linux-gnu &&
-              cp index.js index.cjs
-              strip *.node
+              cp index.js index.cjs &&
+              if ls *.node 1> /dev/null 2>&1; then strip *.node; fi
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            build: |-
+              set -e &&
+              cd fhirpath-node &&
+              npm run build --target aarch64-unknown-linux-gnu &&
+              cp index.js index.cjs &&
+              if ls *.node 1> /dev/null 2>&1; then strip *.node; fi
           - host: macos-latest
             target: aarch64-apple-darwin
             build: |
               cd fhirpath-node
               npm run build --target aarch64-apple-darwin
               cp index.js index.cjs
-              strip -x *.node
+              if ls *.node 1> /dev/null 2>&1; then strip -x *.node; fi
     steps:
       - uses: actions/checkout@v4
 
@@ -262,21 +272,67 @@ jobs:
     - name: Download all artifacts
       uses: actions/download-artifact@v4
 
-    - name: Move node bindings
+    - name: Organize node bindings
       run: |
         cd fhirpath-node
         npm ci
-        for dir in ../bindings-*; do
-          if [ -d "$dir" ]; then
-            cp "$dir"/*.node . 2>/dev/null || true
+        
+        # Create platform-specific directories and organize bindings
+        for artifact_dir in ../bindings-*; do
+          if [ -d "$artifact_dir" ]; then
+            # Extract target from artifact directory name (bindings-{target})
+            target=$(basename "$artifact_dir" | sed 's/bindings-//')
+            
+            # Skip if target is empty or undefined
+            if [ -z "$target" ] || [ "$target" = "undefined" ]; then
+              echo "Skipping artifact with undefined target: $artifact_dir"
+              continue
+            fi
+            
+            echo "Processing target: $target"
+            
+            # Create target directory if it doesn't exist
+            mkdir -p "$target"
+            
+            # Copy .node files to target directory
+            if ls "$artifact_dir"/*.node 1> /dev/null 2>&1; then
+              cp "$artifact_dir"/*.node "$target/"
+              echo "Copied .node files to $target/"
+            fi
+            
+            # Copy platform-specific wrapper files if they exist
+            if [ -f "$target/index.js" ]; then
+              echo "Platform-specific wrapper already exists for $target"
+            else
+              # Copy generic wrapper files to platform directory
+              if [ -f "index.js" ]; then
+                cp index.js "$target/"
+              fi
+              if [ -f "index.d.ts" ]; then
+                cp index.d.ts "$target/"
+              fi
+            fi
           fi
         done
 
     - name: List files for debugging
-      run: ls -la fhirpath-node/
+      run: |
+        echo "=== Root directory ==="
+        ls -la fhirpath-node/
+        echo "=== Platform directories ==="
+        for dir in fhirpath-node/*/; do
+          if [ -d "$dir" ]; then
+            echo "--- $(basename "$dir") ---"
+            ls -la "$dir"
+          fi
+        done
 
     - name: Publish Node.js package
-      run: cd fhirpath-node && npm publish
+      run: |
+        cd fhirpath-node
+        # Use napi prepublish to prepare the package for publishing
+        npm run prepublishOnly
+        npm publish
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
