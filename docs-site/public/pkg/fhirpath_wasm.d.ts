@@ -29,6 +29,16 @@ export function validate_fhirpath(expression: string): string;
  * Get the FHIRPath specification version
  */
 export function get_fhirpath_version(): string;
+/**
+ * Get the AST (Abstract Syntax Tree) of a FHIRPath expression
+ *
+ * # Arguments
+ * * `expression` - The FHIRPath expression to parse
+ *
+ * # Returns
+ * A JSON string containing the AST representation, or an error message
+ */
+export function get_expression_ast(expression: string): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -38,6 +48,7 @@ export interface InitOutput {
   readonly evaluate_fhirpath: (a: number, b: number, c: number, d: number) => [number, number];
   readonly validate_fhirpath: (a: number, b: number) => [number, number];
   readonly get_fhirpath_version: () => [number, number];
+  readonly get_expression_ast: (a: number, b: number) => [number, number];
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

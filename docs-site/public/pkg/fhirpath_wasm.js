@@ -162,6 +162,32 @@ export function get_fhirpath_version() {
     }
 }
 
+/**
+ * Get the AST (Abstract Syntax Tree) of a FHIRPath expression
+ *
+ * # Arguments
+ * * `expression` - The FHIRPath expression to parse
+ *
+ * # Returns
+ * A JSON string containing the AST representation, or an error message
+ * @param {string} expression
+ * @returns {string}
+ */
+export function get_expression_ast(expression) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ptr0 = passStringToWasm0(expression, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.get_expression_ast(ptr0, len0);
+        deferred2_0 = ret[0];
+        deferred2_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
 async function __wbg_load(module, imports) {
     if (typeof Response === 'function' && module instanceof Response) {
         if (typeof WebAssembly.instantiateStreaming === 'function') {

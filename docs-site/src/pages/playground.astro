@@ -24,154 +24,277 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             line-height: 1.6;
             color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background-attachment: fixed;
+            height: 100vh;
+            overflow: hidden;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1600px;
             margin: 0 auto;
             padding: 20px;
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         /* Header styles */
         header {
             text-align: center;
-            margin-bottom: 40px;
+            margin-bottom: 30px;
             color: white;
+            flex-shrink: 0;
         }
 
         header h1 {
-            font-size: 2.5rem;
+            font-size: 2.8rem;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(45deg, #fff, #f0f8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 255, 255, 0.3);
+            }
+            to {
+                text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.4), 0 0 30px rgba(255, 255, 255, 0.5);
+            }
         }
 
         header p {
             font-size: 1.2rem;
-            opacity: 0.9;
+            opacity: 0.95;
             margin-bottom: 15px;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
         }
 
         .version-info {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 8px 16px;
-            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.25);
+            padding: 10px 18px;
+            border-radius: 25px;
             display: inline-block;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .version-info:hover {
+            background: rgba(255, 255, 255, 0.35);
+            transform: translateY(-2px);
         }
 
         /* Main content */
         main {
             flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         .demo-section {
-            background: white;
-            border-radius: 12px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow:
+                0 20px 40px rgba(0, 0, 0, 0.15),
+                0 0 0 1px rgba(255, 255, 255, 0.8),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9);
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto;
-            gap: 30px;
+            grid-template-columns: 1fr 2fr;
+            grid-template-rows: auto 1fr;
+            gap: 35px;
+            flex: 1;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .input-section {
             grid-column: 1 / -1;
+            max-height: 250px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         .expression-section {
             grid-column: 1 / 2;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding-right: 10px;
+        }
+
+        .expression-fixed-content {
+            flex-shrink: 0;
+        }
+
+        .expression-scrollable-content {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 10px;
         }
 
         .result-section {
             grid-column: 2 / 3;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         /* Section headers */
         h2 {
-            color: #4a5568;
-            margin-bottom: 15px;
-            font-size: 1.4rem;
-            border-bottom: 2px solid #e2e8f0;
-            padding-bottom: 8px;
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            border-bottom: 3px solid transparent;
+            border-image: linear-gradient(90deg, #667eea, #764ba2, #f093fb) 1;
+            padding-bottom: 10px;
+            position: relative;
+        }
+
+        h2::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            left: 0;
+            width: 50px;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 2px;
         }
 
         h3 {
             color: #4a5568;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            font-weight: 600;
         }
 
         /* Form elements */
         textarea, input[type="text"] {
             width: 100%;
-            padding: 12px;
+            padding: 16px;
             border: 2px solid #e2e8f0;
-            border-radius: 8px;
+            border-radius: 12px;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 14px;
-            transition: border-color 0.3s ease;
+            transition: all 0.3s ease;
             resize: vertical;
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
         }
 
         textarea {
-            height: 200px;
-            line-height: 1.4;
+            flex: 1;
+            min-height: 180px;
+            line-height: 1.5;
         }
 
         textarea:focus, input[type="text"]:focus {
             outline: none;
             border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            box-shadow:
+                0 0 0 4px rgba(102, 126, 234, 0.15),
+                inset 0 2px 4px rgba(0, 0, 0, 0.06);
+            transform: translateY(-1px);
         }
 
         /* Expression input container */
         .expression-input-container {
+            margin-bottom: 15px;
+        }
+
+        .expression-input-container input {
+            width: 100%;
+        }
+
+        /* Button container */
+        .button-container {
             display: flex;
             gap: 10px;
             margin-bottom: 20px;
         }
 
-        .expression-input-container input {
-            flex: 1;
-        }
-
         /* Buttons */
         button {
-            padding: 12px 20px;
+            padding: 14px 24px;
             border: none;
-            border-radius: 6px;
+            border-radius: 12px;
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.8px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover::before {
+            left: 100%;
         }
 
         #evaluate-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         #evaluate-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
         }
 
         #validate-btn {
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 50%, #2f855a 100%);
             color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         #validate-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(72, 187, 120, 0.4);
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(72, 187, 120, 0.4);
+        }
+
+        #ast-btn {
+            background: linear-gradient(135deg, #ed8936 0%, #dd6b20 50%, #c05621 100%);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #ast-btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(237, 137, 54, 0.4);
+        }
+
+        button:active {
+            transform: translateY(-1px) scale(0.98);
         }
 
         /* Example buttons */
@@ -202,30 +325,51 @@
         /* Result section */
         #result-container {
             position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
         }
 
         #result-output {
-            background: #1a202c;
+            background: linear-gradient(145deg, #1a202c 0%, #2d3748 100%);
             color: #e2e8f0;
-            padding: 20px;
-            border-radius: 8px;
+            padding: 24px;
+            border-radius: 16px;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 14px;
-            line-height: 1.4;
+            line-height: 1.6;
             white-space: pre-wrap;
             word-wrap: break-word;
-            max-height: 400px;
+            flex: 1;
             overflow-y: auto;
-            border: 2px solid #2d3748;
+            overflow-x: hidden;
+            max-height: 100%;
+            min-height: 200px;
+            border: 2px solid #4a5568;
+            box-shadow:
+                inset 0 2px 8px rgba(0, 0, 0, 0.3),
+                0 4px 20px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            scrollbar-width: thin;
+            scrollbar-color: #4a5568 #2d3748;
         }
 
         #result-output.success {
             border-color: #48bb78;
+            box-shadow:
+                inset 0 2px 8px rgba(0, 0, 0, 0.3),
+                0 4px 20px rgba(72, 187, 120, 0.2),
+                0 0 0 1px rgba(72, 187, 120, 0.3);
         }
 
         #result-output.error {
             border-color: #f56565;
             color: #fed7d7;
+            box-shadow:
+                inset 0 2px 8px rgba(0, 0, 0, 0.3),
+                0 4px 20px rgba(245, 101, 101, 0.2),
+                0 0 0 1px rgba(245, 101, 101, 0.3);
         }
 
         #loading {
@@ -233,15 +377,47 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.95));
+            padding: 24px 32px;
+            border-radius: 16px;
+            box-shadow:
+                0 10px 30px rgba(0, 0, 0, 0.2),
+                0 0 0 1px rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
             z-index: 10;
+            font-weight: 600;
+            color: #4a5568;
         }
 
         .hidden {
             display: none;
+        }
+
+        /* Custom scrollbars */
+        .expression-scrollable-content::-webkit-scrollbar,
+        #result-output::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .expression-scrollable-content::-webkit-scrollbar-track,
+        #result-output::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
+
+        .expression-scrollable-content::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 4px;
+        }
+
+        #result-output::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #4a5568, #2d3748);
+            border-radius: 4px;
+        }
+
+        .expression-scrollable-content::-webkit-scrollbar-thumb:hover,
+        #result-output::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #764ba2, #f093fb);
         }
 
         /* Footer */
@@ -263,9 +439,25 @@
 
         /* Responsive design */
         @media (max-width: 768px) {
+            body {
+                height: 100vh;
+                overflow: hidden;
+            }
+
+            .container {
+                height: 100vh;
+                padding: 15px;
+            }
+
             .demo-section {
                 grid-template-columns: 1fr;
-                padding: 20px;
+                grid-template-rows: auto 1fr 1fr;
+                padding: 25px;
+                gap: 25px;
+            }
+
+            .input-section {
+                max-height: 200px;
             }
 
             .expression-section,
@@ -273,20 +465,87 @@
                 grid-column: 1 / -1;
             }
 
-            .expression-input-container {
+            .expression-section {
+                grid-row: 2;
+                max-height: 300px;
+            }
+
+            .result-section {
+                grid-row: 3;
+            }
+
+            .button-container {
                 flex-direction: column;
+                gap: 10px;
+            }
+
+            .button-container button {
+                width: 100%;
+                padding: 12px 20px;
             }
 
             .example-buttons {
                 justify-content: center;
+                gap: 6px;
+            }
+
+            .example-btn {
+                font-size: 11px;
+                padding: 6px 10px;
+            }
+
+            header {
+                margin-bottom: 20px;
             }
 
             header h1 {
-                font-size: 2rem;
+                font-size: 2.2rem;
+            }
+
+            header p {
+                font-size: 1rem;
             }
 
             textarea {
-                height: 150px;
+                min-height: 120px;
+                padding: 12px;
+            }
+
+            h2 {
+                font-size: 1.3rem;
+                margin-bottom: 15px;
+            }
+
+            h3 {
+                font-size: 1rem;
+                margin-bottom: 12px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+
+            .demo-section {
+                padding: 20px;
+                gap: 20px;
+            }
+
+            header h1 {
+                font-size: 1.8rem;
+            }
+
+            .example-buttons {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .example-btn {
+                text-align: left;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
         }
 
@@ -306,22 +565,31 @@
             animation: fadeIn 0.6s ease-out;
         }
 
-        /* Scrollbar styling */
+        /* Enhanced scrollbar styling for result output */
         #result-output::-webkit-scrollbar {
-            width: 8px;
+            width: 12px;
         }
 
         #result-output::-webkit-scrollbar-track {
             background: #2d3748;
+            border-radius: 6px;
+            margin: 4px;
         }
 
         #result-output::-webkit-scrollbar-thumb {
-            background: #4a5568;
-            border-radius: 4px;
+            background: linear-gradient(135deg, #4a5568, #718096);
+            border-radius: 6px;
+            border: 2px solid #2d3748;
+            min-height: 30px;
         }
 
         #result-output::-webkit-scrollbar-thumb:hover {
-            background: #718096;
+            background: linear-gradient(135deg, #718096, #a0aec0);
+            border-color: #4a5568;
+        }
+
+        #result-output::-webkit-scrollbar-thumb:active {
+            background: linear-gradient(135deg, #a0aec0, #cbd5e0);
         }
     </style>
 </head>
@@ -343,15 +611,21 @@
             </div>
 
             <div class="expression-section">
-                <h2>FHIRPath Expression</h2>
-                <div class="expression-input-container">
-                    <input type="text" id="expression-input" placeholder="Enter FHIRPath expression..."
-                           value="Patient.name.given">
-                    <button id="evaluate-btn">Evaluate</button>
-                    <button id="validate-btn">Validate</button>
+                <div class="expression-fixed-content">
+                    <h2>FHIRPath Expression</h2>
+                    <div class="expression-input-container">
+                        <input type="text" id="expression-input" placeholder="Enter FHIRPath expression..."
+                               value="Patient.name.given">
+                    </div>
+                    <div class="button-container">
+                        <button id="evaluate-btn">Evaluate</button>
+                        <button id="validate-btn">Validate</button>
+                        <button id="ast-btn">Get AST</button>
+                    </div>
                 </div>
-                <div class="quick-examples">
-                    <h3>Quick Examples:</h3>
+                <div class="expression-scrollable-content">
+                    <div class="quick-examples">
+                    <h3>Basic Examples:</h3>
                     <div class="example-buttons">
                         <button class="example-btn" data-expression="Patient.name.given">Patient.name.given</button>
                         <button class="example-btn" data-expression="Patient.name.family">Patient.name.family</button>
@@ -362,6 +636,79 @@
                             Patient.telecom.where(system='phone').value
                         </button>
                     </div>
+                </div>
+
+                <div class="complex-examples">
+                    <h3>Complex Examples:</h3>
+                    <div class="example-buttons">
+                        <button class="example-btn" data-expression="Patient.name.given.first() + ' ' + Patient.name.family.first()">
+                            Patient.name.given.first() + ' ' + Patient.name.family.first()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.name.given.count() > 1">
+                            Patient.name.given.count() > 1
+                        </button>
+                        <button class="example-btn" data-expression="Patient.telecom.where(system='phone' and use='home').exists()">
+                            Patient.telecom.where(system='phone' and use='home').exists()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.address.line.select($this + ', ' + %context.city).first()">
+                            Patient.address.line.select($this + ', ' + %context.city).first()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.birthDate.substring(0,4).convertsToInteger()">
+                            Patient.birthDate.substring(0,4).convertsToInteger()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.name.family.first().length() > 2">
+                            Patient.name.family.first().length() > 2
+                        </button>
+                        <button class="example-btn" data-expression="Patient.telecom.select(system + ': ' + value)">
+                            Patient.telecom.select(system + ': ' + value)
+                        </button>
+                        <button class="example-btn" data-expression="Patient.address.where(city.startsWith('P')).city">
+                            Patient.address.where(city.startsWith('P')).city
+                        </button>
+                        <button class="example-btn" data-expression="Patient.name.given.where(length() = 1).first()">
+                            Patient.name.given.where(length() = 1).first()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.gender = 'male' and Patient.name.given.count() >= 2">
+                            Patient.gender = 'male' and Patient.name.given.count() >= 2
+                        </button>
+                    </div>
+                </div>
+
+                <div class="advanced-examples">
+                    <h3>Advanced Examples:</h3>
+                    <div class="example-buttons">
+                        <button class="example-btn" data-expression="Patient.name.family.first().upper()">
+                            Patient.name.family.first().upper()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.birthDate.toDate() &lt; today()">
+                            Patient.birthDate.toDate() &lt; today()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.telecom.where(system='phone').value.matches('[0-9-]+')">
+                            Patient.telecom.where(system='phone').value.matches('[0-9-]+')
+                        </button>
+                        <button class="example-btn" data-expression="Patient.address.line.join(' ')">
+                            Patient.address.line.join(' ')
+                        </button>
+                        <button class="example-btn" data-expression="Patient.name.given.select($this.substring(0,1)).join('')">
+                            Patient.name.given.select($this.substring(0,1)).join('')
+                        </button>
+                        <button class="example-btn" data-expression="Patient.address.postalCode.replace('-', '')">
+                            Patient.address.postalCode.replace('-', '')
+                        </button>
+                        <button class="example-btn" data-expression="Patient.name.given.all(length() > 0)">
+                            Patient.name.given.all(length() > 0)
+                        </button>
+                        <button class="example-btn" data-expression="Patient.telecom.select(use + ' ' + system).distinct()">
+                            Patient.telecom.select(use + ' ' + system).distinct()
+                        </button>
+                        <button class="example-btn" data-expression="Patient.address.city.indexOf('Ville')">
+                            Patient.address.city.indexOf('Ville')
+                        </button>
+                        <button class="example-btn" data-expression="Patient.name.family.first().endsWith('oe')">
+                            Patient.name.family.first().endsWith('oe')
+                        </button>
+                    </div>
+                </div>
                 </div>
             </div>
 
@@ -396,6 +743,7 @@
             this.evaluate_fhirpath = null;
             this.validate_fhirpath = null;
             this.get_fhirpath_version = null;
+            this.get_expression_ast = null;
         }
 
         async init() {
@@ -404,7 +752,7 @@
                 const wasmGlue = await import(/* @vite-ignore */ wasmModulePath);
 
                 // Store the functions we need
-                const { default: initWasm, evaluate_fhirpath, validate_fhirpath, get_fhirpath_version } = wasmGlue;
+                const { default: initWasm, evaluate_fhirpath, validate_fhirpath, get_fhirpath_version, get_expression_ast } = wasmGlue;
 
                 // Initialize the WASM module
                 this.wasmModule = await initWasm();
@@ -414,6 +762,7 @@
                 this.evaluate_fhirpath = evaluate_fhirpath;
                 this.validate_fhirpath = validate_fhirpath;
                 this.get_fhirpath_version = get_fhirpath_version;
+                this.get_expression_ast = get_expression_ast;
 
                 // Set default JSON content
                 this.setDefaultContent();
@@ -479,6 +828,10 @@
             // Validate button
             const validateBtn = document.getElementById('validate-btn');
             validateBtn.addEventListener('click', () => this.validateExpression());
+
+            // AST button
+            const astBtn = document.getElementById('ast-btn');
+            astBtn.addEventListener('click', () => this.getExpressionAst());
 
             // Example buttons
             const exampleButtons = document.querySelectorAll('.example-btn');
@@ -584,6 +937,39 @@
                 }
             } catch (error) {
                 this.showError(`Validation error: ${error.message}`);
+            } finally {
+                this.showLoading(false);
+            }
+        }
+
+        async getExpressionAst() {
+            if (!this.isInitialized) {
+                this.showError('WASM module not initialized yet. Please wait...');
+                return;
+            }
+
+            const expression = document.getElementById('expression-input').value.trim();
+
+            if (!expression) {
+                this.showError('Please enter a FHIRPath expression to get AST');
+                return;
+            }
+
+            this.showLoading(true);
+
+            try {
+                const result = this.get_expression_ast(expression);
+                const parsedResult = JSON.parse(result);
+
+                if (parsedResult.error) {
+                    this.showResult(`❌ AST Error: ${parsedResult.error}`, 'error');
+                } else {
+                    // Format the AST for display
+                    const formattedAst = parsedResult.ast.replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                    this.showResult(`🌳 Expression AST:\n\n${formattedAst}`, 'success');
+                }
+            } catch (error) {
+                this.showError(`AST generation error: ${error.message}`);
             } finally {
                 this.showLoading(false);
             }

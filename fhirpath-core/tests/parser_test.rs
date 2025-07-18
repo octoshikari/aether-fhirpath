@@ -3,7 +3,7 @@
 // This file contains tests for the FHIRPath parser.
 
 use fhirpath_core::lexer::tokenize;
-use fhirpath_core::parser::{AstNode, BinaryOperator, parse};
+use fhirpath_core::parser::{parse, AstNode, BinaryOperator};
 
 #[test]
 fn test_parse_identifier() {

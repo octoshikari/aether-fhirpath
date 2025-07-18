@@ -50,6 +50,7 @@ pub struct FhirResource {
     pub resource_type: Option<String>,
 
     /// Resource properties
+    #[serde(default)]
     pub properties: HashMap<String, serde_json::Value>,
 }
 

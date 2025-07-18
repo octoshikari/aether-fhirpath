@@ -5,10 +5,10 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use fhirpath_core::evaluator::{evaluate_expression, evaluate_expression_streaming};
+use fhirpath_core::evaluator::{evaluate_expression_optimized, evaluate_expression_streaming};
 use fhirpath_core::lexer::tokenize;
 use fhirpath_core::model::FhirPathValue;
-use fhirpath_core::parser::parse;
+use fhirpath_core::parser::{parse, AstNode, BinaryOperator, UnaryOperator};
 use std::fs;
 use std::path::PathBuf;
 
@@ -44,6 +44,16 @@ enum Commands {
     Validate {
         /// FHIRPath expression to validate
         expression: String,
+    },
+
+    /// Show parsed AST of a FHIRPath expression
+    Ast {
+        /// FHIRPath expression to parse and display AST
+        expression: String,
+
+        /// Output format (tree, debug)
+        #[arg(short, long, default_value = "tree")]
+        format: String,
     },
 }
 
@@ -97,7 +107,7 @@ fn main() -> Result<()> {
                 let resource_json: serde_json::Value = serde_json::from_str(&resource_content)
                     .with_context(|| "Failed to parse resource as JSON")?;
 
-                evaluate_expression(expression, resource_json)
+                evaluate_expression_optimized(expression, resource_json)
                     .map_err(|e| anyhow::anyhow!("FHIRPath evaluation error: {}", e))
             };
 
@@ -154,6 +164,19 @@ fn main() -> Result<()> {
                         "Result:".red().bold(),
                         format!("Invalid: {}", error)
                     );
+                }
+            }
+
+            Ok(())
+        }
+        Commands::Ast { expression, format } => {
+            println!("{} {}", "Parsing:".green().bold(), expression);
+
+            // Parse the expression and display the AST
+            match parse_and_display_ast(expression, format) {
+                Ok(()) => {}
+                Err(error) => {
+                    println!("{} {}", "Error:".red().bold(), error);
                 }
             }
 
@@ -267,5 +290,136 @@ fn value_to_json(value: &FhirPathValue) -> Result<serde_json::Value, serde_json:
             }
         }
         FhirPathValue::Resource(resource) => Ok(resource.to_json()),
+    }
+}
+
+/// Parse an FHIRPath expression and display its AST
+fn parse_and_display_ast(expression: &str, format: &str) -> Result<(), String> {
+    // First, try to tokenize the expression
+    let tokens = match tokenize(expression) {
+        Ok(tokens) => tokens,
+        Err(error) => return Err(error.to_string()),
+    };
+
+    // Then, try to parse the tokens
+    let ast = match parse(&tokens) {
+        Ok(ast) => ast,
+        Err(error) => return Err(error.to_string()),
+    };
+
+    // Display the AST based on the requested format
+    match format {
+        "tree" => {
+            println!("{} ", "AST:".green().bold());
+            println!("{}", format_ast_as_tree(&ast, 0));
+        }
+        "debug" => {
+            println!("{} ", "AST:".green().bold());
+            println!("{:#?}", ast);
+        }
+        _ => {
+            println!("{} ", "AST:".green().bold());
+            println!("{}", format_ast_as_tree(&ast, 0));
+        }
+    }
+
+    Ok(())
+}
+
+/// Format AST as a tree structure
+fn format_ast_as_tree(node: &AstNode, indent: usize) -> String {
+    let indent_str = "  ".repeat(indent);
+    let mut result = String::new();
+
+    match node {
+        AstNode::Identifier(name) => {
+            result.push_str(&format!("{}Identifier: {}\n", indent_str, name));
+        }
+        AstNode::StringLiteral(value) => {
+            result.push_str(&format!("{}StringLiteral: \"{}\"\n", indent_str, value));
+        }
+        AstNode::NumberLiteral(value) => {
+            result.push_str(&format!("{}NumberLiteral: {}\n", indent_str, value));
+        }
+        AstNode::BooleanLiteral(value) => {
+            result.push_str(&format!("{}BooleanLiteral: {}\n", indent_str, value));
+        }
+        AstNode::DateTimeLiteral(value) => {
+            result.push_str(&format!("{}DateTimeLiteral: {}\n", indent_str, value));
+        }
+        AstNode::Variable(name) => {
+            result.push_str(&format!("{}Variable: %{}\n", indent_str, name));
+        }
+        AstNode::Path(left, right) => {
+            result.push_str(&format!("{}Path:\n", indent_str));
+            result.push_str(&format!("{}├─ Left:\n", indent_str));
+            result.push_str(&format_ast_as_tree(left, indent + 2));
+            result.push_str(&format!("{}└─ Right:\n", indent_str));
+            result.push_str(&format_ast_as_tree(right, indent + 2));
+        }
+        AstNode::FunctionCall { name, arguments } => {
+            result.push_str(&format!("{}FunctionCall: {}()\n", indent_str, name));
+            if !arguments.is_empty() {
+                result.push_str(&format!("{}Arguments:\n", indent_str));
+                for (i, arg) in arguments.iter().enumerate() {
+                    let prefix = if i == arguments.len() - 1 { "└─" } else { "├─" };
+                    result.push_str(&format!("{}{} Arg {}:\n", indent_str, prefix, i + 1));
+                    result.push_str(&format_ast_as_tree(arg, indent + 2));
+                }
+            }
+        }
+        AstNode::BinaryOp { op, left, right } => {
+            result.push_str(&format!("{}BinaryOp: {}\n", indent_str, format_binary_operator(op)));
+            result.push_str(&format!("{}├─ Left:\n", indent_str));
+            result.push_str(&format_ast_as_tree(left, indent + 2));
+            result.push_str(&format!("{}└─ Right:\n", indent_str));
+            result.push_str(&format_ast_as_tree(right, indent + 2));
+        }
+        AstNode::UnaryOp { op, operand } => {
+            result.push_str(&format!("{}UnaryOp: {}\n", indent_str, format_unary_operator(op)));
+            result.push_str(&format!("{}└─ Operand:\n", indent_str));
+            result.push_str(&format_ast_as_tree(operand, indent + 2));
+        }
+        AstNode::Indexer { collection, index } => {
+            result.push_str(&format!("{}Indexer:\n", indent_str));
+            result.push_str(&format!("{}├─ Collection:\n", indent_str));
+            result.push_str(&format_ast_as_tree(collection, indent + 2));
+            result.push_str(&format!("{}└─ Index:\n", indent_str));
+            result.push_str(&format_ast_as_tree(index, indent + 2));
+        }
+    }
+
+    result
+}
+
+/// Format binary operator as string
+fn format_binary_operator(op: &BinaryOperator) -> &'static str {
+    match op {
+        BinaryOperator::Equals => "=",
+        BinaryOperator::NotEquals => "!=",
+        BinaryOperator::LessThan => "<",
+        BinaryOperator::LessOrEqual => "<=",
+        BinaryOperator::GreaterThan => ">",
+        BinaryOperator::GreaterOrEqual => ">=",
+        BinaryOperator::Addition => "+",
+        BinaryOperator::Subtraction => "-",
+        BinaryOperator::Multiplication => "*",
+        BinaryOperator::Division => "/",
+        BinaryOperator::Mod => "mod",
+        BinaryOperator::And => "and",
+        BinaryOperator::Or => "or",
+        BinaryOperator::Xor => "xor",
+        BinaryOperator::Implies => "implies",
+        BinaryOperator::In => "in",
+        BinaryOperator::Union => "|",
+        BinaryOperator::Concatenation => "&",
+    }
+}
+
+/// Format unary operator as string
+fn format_unary_operator(op: &UnaryOperator) -> &'static str {
+    match op {
+        UnaryOperator::Negate => "-",
+        UnaryOperator::Not => "not",
     }
 }

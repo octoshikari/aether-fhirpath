@@ -34,7 +34,18 @@ pub enum TokenType {
     RightParen,   // )
     LeftBracket,  // [
     RightBracket, // ]
+    LeftBrace,    // {
+    RightBrace,   // }
     Comma,        // ,
+    Pipe,         // |
+    Colon,        // :
+
+    // Special characters
+    Backtick,  // `
+    Dollar,    // $
+    At,        // @
+    Backslash, // \
+    Percent,   // %
 
     // Keywords
     And,     // and
@@ -42,6 +53,7 @@ pub enum TokenType {
     Xor,     // xor
     Implies, // implies
     In,      // in
+    Mod,     // mod
 
     // End of input
     EOF,
@@ -86,6 +98,7 @@ impl<'a> Lexer<'a> {
         keywords.insert("xor".to_string(), TokenType::Xor);
         keywords.insert("implies".to_string(), TokenType::Implies);
         keywords.insert("in".to_string(), TokenType::In);
+        keywords.insert("mod".to_string(), TokenType::Mod);
         keywords.insert("true".to_string(), TokenType::BooleanLiteral);
         keywords.insert("false".to_string(), TokenType::BooleanLiteral);
 
@@ -195,24 +208,27 @@ impl<'a> Lexer<'a> {
                 number.push(c);
                 self.advance();
             } else if c == '.' && !has_decimal {
-                // Handle decimal point
-                has_decimal = true;
-                number.push(c);
-                self.advance();
-
-                // Ensure there's at least one digit after the decimal
-                if let Some(&next) = self.peek() {
-                    if !next.is_ascii_digit() {
-                        return Err(FhirPathError::LexerError(format!(
-                            "Expected digit after decimal point at line {}, column {}",
-                            self.line, self.column
-                        )));
+                // Check if there's a digit after the decimal point
+                // Look ahead without consuming the dot
+                let mut temp_pos = self.position + 1;
+                if temp_pos < self.input.len() {
+                    let next_char = self.input.chars().nth(temp_pos).unwrap();
+                    if next_char.is_ascii_digit() {
+                        // It's a decimal number, consume the dot and include it
+                        self.advance(); // consume the dot
+                        has_decimal = true;
+                        number.push(c);
+                        // Continue to read the digits after the decimal point
+                    } else {
+                        // It's not a decimal number (probably a method call like "1.round()")
+                        // Don't consume the dot, let it be tokenized separately
+                        break;
                     }
                 } else {
-                    // No character after decimal point
+                    // End of input after decimal point - not a valid decimal
                     return Err(FhirPathError::LexerError(format!(
                         "Expected digit after decimal point at line {}, column {}",
-                        self.line, self.column
+                        self.line, self.column + 1
                     )));
                 }
             } else {
@@ -305,9 +321,25 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Ok(self.make_token(TokenType::RightBracket, "]".to_string()))
                 }
+                '{' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::LeftBrace, "{".to_string()))
+                }
+                '}' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::RightBrace, "}".to_string()))
+                }
                 ',' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Comma, ",".to_string()))
+                }
+                '|' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Pipe, "|".to_string()))
+                }
+                ':' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Colon, ":".to_string()))
                 }
                 '.' => {
                     self.advance();
@@ -328,6 +360,32 @@ impl<'a> Lexer<'a> {
                 '/' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Divide, "/".to_string()))
+                }
+
+                // Special characters
+                '`' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Backtick, "`".to_string()))
+                }
+                '$' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Dollar, "$".to_string()))
+                }
+                '@' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::At, "@".to_string()))
+                }
+                '\\' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Backslash, "\\".to_string()))
+                }
+                '%' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Percent, "%".to_string()))
+                }
+                '&' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::And, "&".to_string()))
                 }
 
                 // Two-character tokens

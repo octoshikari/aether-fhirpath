@@ -1,7 +1,7 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use fhirpath_core::evaluator::{
-    LoggingVisitor, NoopVisitor, evaluate_expression, evaluate_expression_optimized,
-    evaluate_expression_with_visitor,
+    evaluate_expression, evaluate_expression_optimized, evaluate_expression_with_visitor,
+    LoggingVisitor, NoopVisitor,
 };
 use fhirpath_core::lexer::tokenize;
 use fhirpath_core::parser::parse;

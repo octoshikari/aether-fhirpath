@@ -13,9 +13,9 @@ Based on the latest test run of the official FHIRPath test suite:
 
 | Status | Count | Percentage |
 |--------|-------|------------|
-| ✅ **Passed** | 179 | 25.2% |
-| ❌ **Failed** | 501 | 70.5% |
-| ⏭️ **Skipped** | 31 | 4.4% |
+| ✅ **Passed** | 379 | 53.3% |
+| ❌ **Failed** | 332 | 46.7% |
+| ⏭️ **Skipped** | 0 | 0.0% |
 | **Total** | **711** | **100%** |
 
 ## Implementation Status
@@ -195,5 +195,5 @@ This will show detailed results for each test, including which expressions are b
 
 ---
 
-*Last updated: July 17, 2025*  
+*Last updated: July 18, 2025*
 *Test suite version: Official FHIRPath R4 tests*

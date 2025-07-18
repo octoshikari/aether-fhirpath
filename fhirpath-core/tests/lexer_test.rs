@@ -2,7 +2,7 @@
 //
 // This file contains tests for the FHIRPath lexer.
 
-use fhirpath_core::lexer::{TokenType, tokenize};
+use fhirpath_core::lexer::{tokenize, TokenType};
 
 #[test]
 fn test_empty_input() {
@@ -211,9 +211,64 @@ fn test_error_invalid_decimal() {
 
 #[test]
 fn test_error_unexpected_character() {
-    let result = tokenize("@");
+    let result = tokenize("#");
     assert!(result.is_err());
 
     let err = result.unwrap_err().to_string();
     assert!(err.contains("Unexpected character"));
+}
+
+#[test]
+fn test_integer_method_call_tokenization() {
+    // Test tokenization of integer literals with method calls
+    let expressions = vec![
+        ("1.convertsToInteger()", "Integer with method call"),
+        ("1.0.convertsToInteger()", "Decimal with method call"),
+        ("'1'.convertsToInteger()", "String with method call"),
+    ];
+
+    for (expr, description) in expressions {
+        println!("\nTesting {}: {}", description, expr);
+        let tokens = tokenize(expr).unwrap();
+
+        println!("Tokens:");
+        for (i, token) in tokens.iter().enumerate() {
+            println!("  {}: {:?} - '{}'", i, token.token_type, token.lexeme);
+        }
+
+        // All expressions should have at least: literal, dot, identifier, left_paren, right_paren, EOF
+        assert!(tokens.len() >= 6, "Expected at least 6 tokens for {}, got {}", expr, tokens.len());
+
+        // Check that we have a dot token
+        let has_dot = tokens.iter().any(|t| t.token_type == TokenType::Dot);
+        assert!(has_dot, "Expected dot token in {}", expr);
+
+        // Check that we have the function name
+        let has_converts = tokens.iter().any(|t| t.lexeme == "convertsToInteger");
+        assert!(has_converts, "Expected 'convertsToInteger' identifier in {}", expr);
+    }
+}
+
+#[test]
+fn test_datetime_tokenization() {
+    let test_expressions = vec![
+        "@2015-02-04",
+        "@2015-02-04T14",
+        "@2015-02-04T14:30",
+        "@2015-02-04T14:30:45",
+    ];
+
+    for expr in test_expressions {
+        println!("\n=== Tokenizing: {} ===", expr);
+        match tokenize(expr) {
+            Ok(tokens) => {
+                for (i, token) in tokens.iter().enumerate() {
+                    println!("  {}: {:?} - '{}'", i, token.token_type, token.lexeme);
+                }
+            }
+            Err(e) => {
+                println!("  Error: {:?}", e);
+            }
+        }
+    }
 }

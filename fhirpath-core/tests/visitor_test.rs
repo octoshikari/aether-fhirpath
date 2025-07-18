@@ -1,6 +1,6 @@
 use fhirpath_core::errors::FhirPathError;
 use fhirpath_core::evaluator::{
-    AstVisitor, EvaluationContext, NoopVisitor, evaluate_expression_with_visitor,
+    evaluate_expression_with_visitor, AstVisitor, EvaluationContext, NoopVisitor,
 };
 use fhirpath_core::model::FhirPathValue;
 use fhirpath_core::parser::AstNode;
@@ -47,11 +47,13 @@ impl AstVisitor for CountingVisitor {
             AstNode::StringLiteral(_) => "StringLiteral",
             AstNode::NumberLiteral(_) => "NumberLiteral",
             AstNode::BooleanLiteral(_) => "BooleanLiteral",
+            AstNode::DateTimeLiteral(_) => "DateTimeLiteral",
             AstNode::Path(_, _) => "Path",
             AstNode::BinaryOp { .. } => "BinaryOp",
             AstNode::UnaryOp { .. } => "UnaryOp",
             AstNode::FunctionCall { .. } => "FunctionCall",
             AstNode::Indexer { .. } => "Indexer",
+            AstNode::Variable(_) => "Variable",
         };
 
         self.node_types.borrow_mut().push(node_type.to_string());
