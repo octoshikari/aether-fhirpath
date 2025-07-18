@@ -56,24 +56,24 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            artifact_name: aether-fhripath
-            asset_name: aether-fhripath-linux-x64
+            artifact_name: aether-fhirpath
+            asset_name: aether-fhirpath-linux-x64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: aether-fhripath
-            asset_name: aether-fhripath-linux-arm64
+            artifact_name: aether-fhirpath
+            asset_name: aether-fhirpath-linux-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: aether-fhripath.exe
-            asset_name: aether-fhripath-windows-x64.exe
+            artifact_name: aether-fhirpath.exe
+            asset_name: aether-fhirpath-windows-x64.exe
           - os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: aether-fhripath
-            asset_name: aether-fhripath-macos-x64
+            artifact_name: aether-fhirpath
+            asset_name: aether-fhirpath-macos-x64
           - os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: aether-fhripath
-            asset_name: aether-fhripath-macos-arm64
+            artifact_name: aether-fhirpath
+            asset_name: aether-fhirpath-macos-arm64
 
     steps:
     - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
       uses: Swatinem/rust-cache@v2
 
     - name: Build binary
-      run: cargo build --release --target ${{ matrix.target }} -p aether-fhripath
+      run: cargo build --release --target ${{ matrix.target }} -p aether-fhirpath
 
     - name: Upload binary
       uses: actions/upload-artifact@v4
@@ -238,8 +238,8 @@ jobs:
     - name: Wait for crates.io to update
       run: sleep 30
 
-    - name: Publish aether-fhripath
-      run: cargo publish -p aether-fhripath --token ${{ secrets.CRATES_TOKEN }}
+    - name: Publish aether-fhirpath
+      run: cargo publish -p aether-fhirpath --token ${{ secrets.CRATES_TOKEN }}
 
   publish-npm:
     name: Publish to npm
@@ -328,7 +328,7 @@ jobs:
       with:
         body: ${{ steps.changelog.outputs.changelog }}
         files: |
-          aether-fhripath-*/*
+          aether-fhirpath-*/*
         draft: false
         prerelease: false
       env:
