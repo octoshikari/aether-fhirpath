@@ -19,6 +19,8 @@ jobs:
         rust: [stable]
 
     steps:
+    - name: disable git eol translation
+      run: git config --global core.autocrlf false
     - uses: actions/checkout@v3
 
     - name: Install Rust
