@@ -94,7 +94,7 @@ jobs:
       uses: Swatinem/rust-cache@v2
 
     - name: Build binary
-      run: cargo build --release --target ${{ matrix.target }} -p aether-fhirpath
+      run: cargo build --release --target ${{ matrix.target }} -p fhirpath-cli
 
     - name: Upload binary
       uses: actions/upload-artifact@v4
@@ -239,7 +239,7 @@ jobs:
       run: sleep 30
 
     - name: Publish aether-fhirpath
-      run: cargo publish -p aether-fhirpath --token ${{ secrets.CRATES_TOKEN }}
+      run: cargo publish -p fhirpath-cli --token ${{ secrets.CRATES_TOKEN }}
 
   publish-npm:
     name: Publish to npm
