@@ -37,7 +37,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.android-arm64.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-android-arm64')
+            nativeBinding = require('@aether/fhirpath-node-android-arm64')
           }
         } catch (e) {
           loadError = e
@@ -49,7 +49,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.android-arm-eabi.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-android-arm-eabi')
+            nativeBinding = require('@aether/fhirpath-node-android-arm-eabi')
           }
         } catch (e) {
           loadError = e
@@ -69,7 +69,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.win32-x64-msvc.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-win32-x64-msvc')
+            nativeBinding = require('@aether/fhirpath-node-win32-x64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -83,7 +83,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.win32-ia32-msvc.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-win32-ia32-msvc')
+            nativeBinding = require('@aether/fhirpath-node-win32-ia32-msvc')
           }
         } catch (e) {
           loadError = e
@@ -97,7 +97,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.win32-arm64-msvc.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-win32-arm64-msvc')
+            nativeBinding = require('@aether/fhirpath-node-win32-arm64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -113,7 +113,7 @@ switch (platform) {
       if (localFileExisted) {
         nativeBinding = require('./fhirpath-node.darwin-universal.node')
       } else {
-        nativeBinding = require('@aether/fhirpath-darwin-universal')
+        nativeBinding = require('@aether/fhirpath-node-darwin-universal')
       }
       break
     } catch {}
@@ -124,7 +124,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.darwin-x64.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-darwin-x64')
+            nativeBinding = require('@aether/fhirpath-node-darwin-x64')
           }
         } catch (e) {
           loadError = e
@@ -138,7 +138,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.darwin-arm64.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-darwin-arm64')
+            nativeBinding = require('@aether/fhirpath-node-darwin-arm64')
           }
         } catch (e) {
           loadError = e
@@ -157,7 +157,7 @@ switch (platform) {
       if (localFileExisted) {
         nativeBinding = require('./fhirpath-node.freebsd-x64.node')
       } else {
-        nativeBinding = require('@aether/fhirpath-freebsd-x64')
+        nativeBinding = require('@aether/fhirpath-node-freebsd-x64')
       }
     } catch (e) {
       loadError = e
@@ -174,7 +174,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-x64-musl.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-x64-musl')
+              nativeBinding = require('@aether/fhirpath-node-linux-x64-musl')
             }
           } catch (e) {
             loadError = e
@@ -187,7 +187,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-x64-gnu.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-x64-gnu')
+              nativeBinding = require('@aether/fhirpath-node-linux-x64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -203,7 +203,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-arm64-musl.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-arm64-musl')
+              nativeBinding = require('@aether/fhirpath-node-linux-arm64-musl')
             }
           } catch (e) {
             loadError = e
@@ -216,7 +216,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-arm64-gnu.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-arm64-gnu')
+              nativeBinding = require('@aether/fhirpath-node-linux-arm64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -232,7 +232,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-arm-musleabihf.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-arm-musleabihf')
+              nativeBinding = require('@aether/fhirpath-node-linux-arm-musleabihf')
             }
           } catch (e) {
             loadError = e
@@ -245,7 +245,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-arm-gnueabihf.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-arm-gnueabihf')
+              nativeBinding = require('@aether/fhirpath-node-linux-arm-gnueabihf')
             }
           } catch (e) {
             loadError = e
@@ -261,7 +261,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-riscv64-musl.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-riscv64-musl')
+              nativeBinding = require('@aether/fhirpath-node-linux-riscv64-musl')
             }
           } catch (e) {
             loadError = e
@@ -274,7 +274,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./fhirpath-node.linux-riscv64-gnu.node')
             } else {
-              nativeBinding = require('@aether/fhirpath-linux-riscv64-gnu')
+              nativeBinding = require('@aether/fhirpath-node-linux-riscv64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -289,7 +289,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./fhirpath-node.linux-s390x-gnu.node')
           } else {
-            nativeBinding = require('@aether/fhirpath-linux-s390x-gnu')
+            nativeBinding = require('@aether/fhirpath-node-linux-s390x-gnu')
           }
         } catch (e) {
           loadError = e
