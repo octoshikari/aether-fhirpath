@@ -5,13 +5,12 @@
 #[macro_use]
 extern crate napi_derive;
 
-use fhirpath_core;
 use napi::{Error, Result};
-use serde_json;
 
 #[napi]
+#[derive(Default)]
 pub struct FhirPathEngine {
-    // Internal state if needed
+    // Internally state if needed
 }
 
 #[napi]

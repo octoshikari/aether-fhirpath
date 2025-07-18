@@ -3,6 +3,7 @@
 use fhirpath_core::lexer::{TokenType, tokenize};
 
 #[test]
+#[allow(clippy::assertions_on_constants)]
 fn debug_complex_expression() {
     let expr = "Patient.name[0].given[0] = 'John' and Patient.gender = 'male'";
     let tokens = tokenize(expr).unwrap();
@@ -18,5 +19,6 @@ fn debug_complex_expression() {
     }
 
     // This will always pass, just for debugging
+
     assert!(true);
 }

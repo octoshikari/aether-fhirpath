@@ -11,10 +11,9 @@ use std::fs;
 
 fn load_patient_fixture() -> Value {
     let fixture_path = "tests/fixtures/patient-example.json";
-    let fixture_content = fs::read_to_string(fixture_path)
-        .expect("Failed to read patient fixture file");
-    serde_json::from_str(&fixture_content)
-        .expect("Failed to parse patient fixture JSON")
+    let fixture_content =
+        fs::read_to_string(fixture_path).expect("Failed to read patient fixture file");
+    serde_json::from_str(&fixture_content).expect("Failed to parse patient fixture JSON")
 }
 
 #[test]
@@ -66,7 +65,7 @@ fn test_conformance_basic_property_access() {
         FhirPathValue::Collection(values) => {
             assert_eq!(values.len(), 1);
             match &values[0] {
-                FhirPathValue::Boolean(b) => assert_eq!(*b, true),
+                FhirPathValue::Boolean(b) => assert!(*b),
                 _ => panic!("Expected boolean value for active"),
             }
         }
@@ -203,7 +202,7 @@ fn test_conformance_nested_path_expressions() {
     let result = evaluate_expression("identifier.type.coding.system", patient.clone()).unwrap();
     match result {
         FhirPathValue::Collection(values) => {
-            assert!(values.len() >= 1);
+            assert!(!values.is_empty());
             // Should contain the coding system value
         }
         _ => panic!("Expected collection result"),

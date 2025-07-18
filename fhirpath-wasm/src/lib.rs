@@ -1,6 +1,4 @@
 use wasm_bindgen::prelude::*;
-use fhirpath_core;
-use serde_json;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -17,6 +15,7 @@ extern "C" {
 }
 
 // Define a macro to provide `println!(..)`-style syntax for `console.log` logging.
+#[allow(dead_code)]
 macro_rules! console_log {
     ( $( $t:tt )* ) => {
         log(&format!( $( $t )* ))
@@ -49,12 +48,10 @@ pub fn evaluate_fhirpath(expression: &str, resource_json: &str) -> String {
 
     // Evaluate the FHIRPath expression
     match fhirpath_core::evaluate(expression, resource) {
-        Ok(result) => {
-            match serde_json::to_string(&result) {
-                Ok(json_str) => json_str,
-                Err(e) => format!(r#"{{"error": "Failed to serialize result: {}"}}"#, e),
-            }
-        }
+        Ok(result) => match serde_json::to_string(&result) {
+            Ok(json_str) => json_str,
+            Err(e) => format!(r#"{{"error": "Failed to serialize result: {}"}}"#, e),
+        },
         Err(e) => {
             format!(r#"{{"error": "FHIRPath evaluation error: {}"}}"#, e)
         }
@@ -96,7 +93,8 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_evaluate_simple_expression() {
-        let resource = r#"{"resourceType": "Patient", "name": [{"given": ["John"], "family": "Doe"}]}"#;
+        let resource =
+            r#"{"resourceType": "Patient", "name": [{"given": ["John"], "family": "Doe"}]}"#;
         let result = evaluate_fhirpath("Patient.name.given", resource);
         assert!(result.contains("John"));
     }

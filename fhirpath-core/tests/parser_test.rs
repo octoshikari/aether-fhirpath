@@ -51,7 +51,7 @@ fn test_parse_boolean_literal() {
 
     match ast {
         AstNode::BooleanLiteral(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected BooleanLiteral node, got {:?}", ast),
     }

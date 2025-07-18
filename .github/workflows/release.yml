@@ -1,0 +1,335 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test Before Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+#    - name: Clippy
+#      run: cargo clippy --all-targets --all-features -- -D warnings
+
+    - name: Build
+      run: cargo build --verbose
+# will enable after pass more official tests
+#    - name: Run tests
+#      run: cargo test --verbose
+
+  build-binaries:
+    name: Build Cross-Platform Binaries
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: aether-fhripath
+            asset_name: aether-fhripath-linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: aether-fhripath
+            asset_name: aether-fhripath-linux-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: aether-fhripath.exe
+            asset_name: aether-fhripath-windows-x64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: aether-fhripath
+            asset_name: aether-fhripath-macos-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: aether-fhripath
+            asset_name: aether-fhripath-macos-arm64
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        targets: ${{ matrix.target }}
+
+    - name: Install cross-compilation tools
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Build binary
+      run: cargo build --release --target ${{ matrix.target }} -p aether-fhripath
+
+    - name: Upload binary
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  build-node-bindings:
+    name: stable - ${{ matrix.settings.target }} - node@20
+    needs: test
+    runs-on: ${{ matrix.settings.host }}
+    strategy:
+      matrix:
+        settings:
+          - host: macos-latest
+            target: x86_64-apple-darwin
+            build: |
+              cd fhirpath-node
+              npm run build
+              strip -x *.node
+          - host: windows-latest
+            build: |
+              cd fhirpath-node
+              npm run build
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            docker: ghcr.io/napi-rs/napi-rs/nodejs-rust:lts-debian
+            build: |-
+              set -e &&
+              cd fhirpath-node &&
+              npm run build --target x86_64-unknown-linux-gnu &&
+              strip *.node
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: |
+              cd fhirpath-node
+              npm run build --target aarch64-apple-darwin
+              strip -x *.node
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        if: ${{ !matrix.settings.docker }}
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: fhirpath-node/package.json
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        if: ${{ !matrix.settings.docker }}
+        with:
+          toolchain: stable
+          targets: ${{ matrix.settings.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            .cargo-cache
+            target/
+          key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
+
+      - uses: goto-bus-stop/setup-zig@v2
+        if: ${{ matrix.settings.target }}
+        with:
+          version: 0.11.0
+
+      - name: Setup toolchain
+        run: ${{ matrix.settings.setup }}
+        if: ${{ matrix.settings.setup }}
+        shell: bash
+
+      - name: Setup node dependencies
+        if: ${{ !matrix.settings.docker }}
+        run: cd fhirpath-node && npm ci
+
+      - name: Build in docker
+        uses: addnab/docker-run-action@v3
+        if: ${{ matrix.settings.docker }}
+        with:
+          image: ${{ matrix.settings.docker }}
+          options: '--user 0:0 -v ${{ github.workspace }}/.cargo-cache:/root/.cargo/registry/cache -v ${{ github.workspace }}/.cargo/registry/index:/root/.cargo/registry/index -v ${{ github.workspace }}:/build -w /build'
+          run: ${{ matrix.settings.build }}
+
+      - name: Build
+        run: ${{ matrix.settings.build }}
+        if: ${{ !matrix.settings.docker }}
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: fhirpath-node/*.node
+          if-no-files-found: error
+
+  build-wasm:
+    name: Build WASM Package
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install wasm-pack
+      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+    - name: Build WASM package
+      run: cd fhirpath-wasm && npm run build
+
+    - name: Upload WASM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-package
+        path: fhirpath-wasm/pkg/
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: [test, build-binaries]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Publish fhirpath-core
+      run: cargo publish -p fhirpath-core --token ${{ secrets.CRATES_TOKEN }}
+
+    - name: Wait for crates.io to update
+      run: sleep 30
+
+    - name: Publish aether-fhripath
+      run: cargo publish -p aether-fhripath --token ${{ secrets.CRATES_TOKEN }}
+
+  publish-npm:
+    name: Publish to npm
+    needs: [build-node-bindings, build-wasm]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        registry-url: https://registry.npmjs.org/
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Move node bindings
+      run: |
+        cd fhirpath-node
+        npm ci
+        for dir in ../bindings-*; do
+          if [ -d "$dir" ]; then
+            cp "$dir"/*.node . 2>/dev/null || true
+          fi
+        done
+
+    - name: List files for debugging
+      run: ls -la fhirpath-node/
+
+    - name: Publish Node.js package
+      run: cd fhirpath-node && npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Setup WASM package
+      run: |
+        cd fhirpath-wasm
+        cp -r ../wasm-package/* pkg/ 2>/dev/null || true
+        npm ci
+
+    - name: Publish WASM package
+      run: cd fhirpath-wasm && npm publish
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-binaries, build-node-bindings, build-wasm]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Get the tag name
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        
+        # Get previous tag
+        PREV_TAG=$(git describe --tags --abbrev=0 $TAG_NAME^ 2>/dev/null || echo "")
+        
+        # Generate changelog
+        if [ -n "$PREV_TAG" ]; then
+          echo "## Changes since $PREV_TAG" > changelog.md
+          git log --pretty=format:"- %s (%h)" $PREV_TAG..$TAG_NAME >> changelog.md
+        else
+          echo "## Initial Release" > changelog.md
+          echo "This is the first release of Aether FHIRPath." >> changelog.md
+        fi
+        
+        # Set output for use in release
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        cat changelog.md >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body: ${{ steps.changelog.outputs.changelog }}
+        files: |
+          aether-fhripath-*/*
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

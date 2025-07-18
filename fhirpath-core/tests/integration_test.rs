@@ -2,15 +2,8 @@
 //
 // This file contains integration tests for the FHIRPath engine.
 
-use fhirpath_core;
 use std::fs;
 use std::path::Path;
-
-#[test]
-fn test_placeholder() {
-    // This is a placeholder test that will be replaced with real tests
-    assert!(true);
-}
 
 #[test]
 fn test_load_fixture() {

@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "WASM bindings for FHIRPath engine"
 
+[features]
+we_alloc = []
+
 [lib]
 crate-type = ["cdylib"]
 

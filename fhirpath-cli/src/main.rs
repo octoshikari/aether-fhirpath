@@ -34,6 +34,10 @@ enum Commands {
         /// Output format (json, pretty)
         #[arg(short, long, default_value = "pretty")]
         format: String,
+
+        /// Show debug information (Expression, Source, Result). If not provided, only JSON result is shown
+        #[arg(short, long)]
+        debug: bool,
     },
 
     /// Validate a FHIRPath expression syntax
@@ -53,9 +57,12 @@ fn main() -> Result<()> {
             expression,
             resource,
             format,
+            debug,
         } => {
-            println!("{} {}", "Expression:".green().bold(), expression);
-            println!("{} {}", "Resource:".green().bold(), resource.display());
+            if *debug {
+                println!("{} {}", "Expression:".green().bold(), expression);
+                println!("{} {}", "Source:".green().bold(), resource.display());
+            }
 
             // Check file size to determine if we should use streaming mode
             const STREAMING_THRESHOLD: u64 = 10 * 1024 * 1024; // 10MB
@@ -96,23 +103,38 @@ fn main() -> Result<()> {
 
             match result {
                 Ok(value) => {
-                    println!("{} ", "Result:".green().bold());
-                    match format.as_str() {
-                        "json" => match format_as_json(&value) {
+                    if *debug {
+                        println!("{} ", "Result:".green().bold());
+                        match format.as_str() {
+                            "json" => match format_as_json(&value) {
+                                Ok(json_str) => println!("{}", json_str),
+                                Err(e) => println!(
+                                    "{} Failed to format as JSON: {}",
+                                    "Error:".red().bold(),
+                                    e
+                                ),
+                            },
+                            "pretty" => {
+                                println!("{}", format_as_pretty(&value));
+                            }
+                            _ => {
+                                println!("{}", format_as_pretty(&value));
+                            }
+                        }
+                    } else {
+                        // When debug is not enabled, show only JSON result
+                        match format_as_json(&value) {
                             Ok(json_str) => println!("{}", json_str),
-                            Err(e) => println!(
-                                "{} Failed to format as JSON: {}",
-                                "Error:".red().bold(),
-                                e
-                            ),
-                        },
-                        "pretty" | _ => {
-                            println!("{}", format_as_pretty(&value));
+                            Err(e) => println!("Error: Failed to format as JSON: {}", e),
                         }
                     }
                 }
                 Err(error) => {
-                    println!("{} {}", "Error:".red().bold(), error);
+                    if *debug {
+                        println!("{} {}", "Error:".red().bold(), error);
+                    } else {
+                        println!("Error: {}", error);
+                    }
                 }
             }
 
@@ -124,10 +146,7 @@ fn main() -> Result<()> {
             // Validate the expression by attempting to tokenize and parse it
             match validate_expression(expression) {
                 Ok(()) => {
-                    println!(
-                        "{} Valid FHIRPath expression",
-                        "Result:".green().bold()
-                    );
+                    println!("{} Valid FHIRPath expression", "Result:".green().bold());
                 }
                 Err(error) => {
                     println!(
@@ -208,8 +227,7 @@ fn format_as_pretty(value: &FhirPathValue) -> String {
             } else if items.len() == 1 {
                 format_as_pretty(&items[0])
             } else {
-                let formatted_items: Vec<String> =
-                    items.iter().map(format_as_pretty).collect();
+                let formatted_items: Vec<String> = items.iter().map(format_as_pretty).collect();
                 format!("[{}]", formatted_items.join(", "))
             }
         }

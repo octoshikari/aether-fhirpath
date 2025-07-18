@@ -120,9 +120,9 @@ impl EvaluationContext {
     ) -> Result<Self, FhirPathError> {
         let context_value = match &item {
             FhirPathValue::Resource(resource) => {
-                serde_json::to_value(resource).map_err(|e| FhirPathError::JsonError(e))?
+                serde_json::to_value(resource).map_err(FhirPathError::JsonError)?
             }
-            _ => serde_json::to_value(&item).map_err(|e| FhirPathError::JsonError(e))?,
+            _ => serde_json::to_value(&item).map_err(FhirPathError::JsonError)?,
         };
 
         Ok(Self {
@@ -155,6 +155,12 @@ pub trait AstVisitor {
 /// A visitor that logs AST evaluation steps
 pub struct LoggingVisitor {
     depth: std::cell::Cell<usize>,
+}
+
+impl Default for LoggingVisitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LoggingVisitor {
@@ -200,6 +206,12 @@ impl AstVisitor for LoggingVisitor {
 
 /// A no-op visitor that does nothing
 pub struct NoopVisitor;
+
+impl Default for NoopVisitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl NoopVisitor {
     /// Creates a new no-op visitor
@@ -349,7 +361,7 @@ fn evaluate_ast_internal_uncached(
                     let new_context = EvaluationContext {
                         resource: context.resource.clone(),
                         context: serde_json::to_value(&resource)
-                            .map_err(|e| FhirPathError::JsonError(e))?,
+                            .map_err(FhirPathError::JsonError)?,
                         variables: context.variables.clone(),
                         this_item: Some(FhirPathValue::Resource(resource)),
                         index: None,

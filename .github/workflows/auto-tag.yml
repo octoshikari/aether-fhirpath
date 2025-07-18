@@ -1,0 +1,147 @@
+name: Auto Tag Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Cargo.toml'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force create tag even if it already exists'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-version:
+    name: Check Version and Create Tag
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Extract version from Cargo.toml
+      id: version
+      run: |
+        VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+        echo "Detected version: $VERSION"
+
+    - name: Check if tag already exists
+      id: tag_check
+      run: |
+        TAG_NAME="v${{ steps.version.outputs.version }}"
+        if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "Tag $TAG_NAME already exists"
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "Tag $TAG_NAME does not exist"
+        fi
+
+    - name: Get previous version for comparison
+      id: prev_version
+      if: steps.tag_check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+      run: |
+        # Get the most recent tag
+        PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -n "$PREV_TAG" ]; then
+          PREV_VERSION=${PREV_TAG#v}
+          echo "previous=$PREV_VERSION" >> $GITHUB_OUTPUT
+          echo "Previous version: $PREV_VERSION"
+        else
+          echo "previous=" >> $GITHUB_OUTPUT
+          echo "No previous version found"
+        fi
+
+    - name: Validate version change
+      id: validate
+      if: steps.tag_check.outputs.exists == 'false' || github.event.inputs.force == 'true'
+      run: |
+        CURRENT_VERSION="${{ steps.version.outputs.version }}"
+        PREV_VERSION="${{ steps.prev_version.outputs.previous }}"
+        
+        if [ -z "$PREV_VERSION" ]; then
+          echo "valid=true" >> $GITHUB_OUTPUT
+          echo "First release - version validation passed"
+        else
+          # Simple version comparison - in a real scenario you might want more sophisticated semver comparison
+          if [ "$CURRENT_VERSION" != "$PREV_VERSION" ]; then
+            echo "valid=true" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREV_VERSION to $CURRENT_VERSION - validation passed"
+          else
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged ($CURRENT_VERSION) - skipping tag creation"
+          fi
+        fi
+
+    - name: Check for unreleased changes in CHANGELOG
+      id: changelog_check
+      if: (steps.tag_check.outputs.exists == 'false' || github.event.inputs.force == 'true') && steps.validate.outputs.valid == 'true'
+      run: |
+        if grep -q "## \[Unreleased\]" CHANGELOG.md && grep -A 20 "## \[Unreleased\]" CHANGELOG.md | grep -q "### "; then
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "Found unreleased changes in CHANGELOG.md"
+        else
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "No unreleased changes found in CHANGELOG.md"
+        fi
+
+    - name: Create and push tag
+      if: |
+        (steps.tag_check.outputs.exists == 'false' || github.event.inputs.force == 'true') && 
+        steps.validate.outputs.valid == 'true' && 
+        steps.changelog_check.outputs.has_changes == 'true'
+      run: |
+        TAG_NAME="v${{ steps.version.outputs.version }}"
+        
+        # Configure git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        
+        # Create annotated tag with message
+        git tag -a "$TAG_NAME" -m "Release $TAG_NAME
+
+        Automatically created by GitHub Actions from version bump in Cargo.toml.
+        
+        Version: ${{ steps.version.outputs.version }}
+        Commit: ${{ github.sha }}
+        Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+        
+        # Push the tag
+        git push origin "$TAG_NAME"
+        
+        echo "✅ Created and pushed tag: $TAG_NAME"
+
+    - name: Summary
+      run: |
+        echo "## Auto Tag Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version detected**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag name**: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag exists**: ${{ steps.tag_check.outputs.exists }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version valid**: ${{ steps.validate.outputs.valid }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Has unreleased changes**: ${{ steps.changelog_check.outputs.has_changes }}" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ steps.tag_check.outputs.exists }}" == "false" && "${{ steps.validate.outputs.valid }}" == "true" && "${{ steps.changelog_check.outputs.has_changes }}" == "true" ]]; then
+          echo "- **Action taken**: ✅ Tag created and pushed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release workflow will be triggered automatically by the new tag." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Action taken**: ❌ No tag created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.tag_check.outputs.exists }}" == "true" ]]; then
+            echo "**Reason**: Tag already exists" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ steps.validate.outputs.valid }}" == "false" ]]; then
+            echo "**Reason**: Version unchanged" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ steps.changelog_check.outputs.has_changes }}" == "false" ]]; then
+            echo "**Reason**: No unreleased changes in CHANGELOG.md" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi

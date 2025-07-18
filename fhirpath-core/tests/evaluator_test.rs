@@ -311,7 +311,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("true and true", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -320,7 +320,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("true and false", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, false);
+            assert!(!value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -329,7 +329,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("true or false", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -338,7 +338,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("false or false", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, false);
+            assert!(!value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -347,7 +347,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("true xor false", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -356,7 +356,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("true xor true", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, false);
+            assert!(!value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -365,7 +365,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("false implies true", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -374,7 +374,7 @@ fn test_evaluate_logical() {
     let result = evaluate_expression("true implies false", resource).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, false);
+            assert!(!value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -427,7 +427,7 @@ fn test_evaluate_unary() {
     let result = evaluate_expression("true", resource.clone()).unwrap();
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }
@@ -452,7 +452,7 @@ fn test_evaluate_complex_expression() {
 
     match result {
         FhirPathValue::Boolean(value) => {
-            assert_eq!(value, true);
+            assert!(value);
         }
         _ => panic!("Expected Boolean value, got {:?}", result),
     }

@@ -67,6 +67,7 @@ pub struct Span {
 }
 
 /// Lexer for FHIRPath expressions
+#[allow(dead_code)]
 pub struct Lexer<'a> {
     input: &'a str,
     chars: Peekable<Chars<'a>>,
@@ -165,7 +166,7 @@ impl<'a> Lexer<'a> {
 
         // Check if it's a keyword
         let token_type = if let Some(keyword_type) = self.keywords.get(&identifier) {
-            keyword_type.clone()
+            *keyword_type
         } else {
             TokenType::Identifier
         };
@@ -190,7 +191,7 @@ impl<'a> Lexer<'a> {
 
         // Continue reading digits
         while let Some(&c) = self.peek() {
-            if c.is_digit(10) {
+            if c.is_ascii_digit() {
                 number.push(c);
                 self.advance();
             } else if c == '.' && !has_decimal {
@@ -201,7 +202,7 @@ impl<'a> Lexer<'a> {
 
                 // Ensure there's at least one digit after the decimal
                 if let Some(&next) = self.peek() {
-                    if !next.is_digit(10) {
+                    if !next.is_ascii_digit() {
                         return Err(FhirPathError::LexerError(format!(
                             "Expected digit after decimal point at line {}, column {}",
                             self.line, self.column

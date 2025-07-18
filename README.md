@@ -232,6 +232,66 @@ cargo test -p fhirpath-cli
 cargo test -- --nocapture
 ```
 
+## Releases
+
+This project uses an automated release process that creates tags and publishes packages automatically.
+
+### Automatic Tag Creation
+
+When you update the version in the root `Cargo.toml` file and push to the `main` branch, a GitHub Actions workflow will automatically:
+
+1. **Detect the version change** from the `Cargo.toml` file
+2. **Validate the change** by ensuring the version has actually changed
+3. **Check for unreleased changes** in `CHANGELOG.md` under the `[Unreleased]` section
+4. **Create and push a git tag** in the format `v{VERSION}` (e.g., `v0.2.0`)
+5. **Trigger the release workflow** which builds and publishes all packages
+
+### Release Process for Maintainers
+
+To create a new release:
+
+1. **Update the changelog**: Add your changes to the `[Unreleased]` section in `CHANGELOG.md`
+2. **Bump the version**: Update the version in the root `Cargo.toml` file
+3. **Update package versions**: Ensure versions are synchronized in:
+   - `fhirpath-node/package.json`
+   - `fhirpath-wasm/package.json`
+   - Individual `Cargo.toml` files (if they override workspace version)
+4. **Commit and push**: Push your changes to the `main` branch
+5. **Automatic processing**: The auto-tag workflow will handle the rest
+
+### Manual Tag Creation
+
+If you need to manually create a tag or force tag creation:
+
+```bash
+# Navigate to Actions tab in GitHub
+# Run "Auto Tag Release" workflow manually
+# Check "Force create tag even if it already exists" if needed
+```
+
+### What Gets Published
+
+Each release automatically publishes:
+- **Rust crates** to [crates.io](https://crates.io):
+  - `fhirpath-core`
+  - `aether-fhripath` (CLI)
+- **Node.js packages** to [npm](https://npmjs.com):
+  - `@aether/fhirpath-node`
+  - `@aether/fhirpath-wasm`
+- **GitHub release** with:
+  - Cross-platform binaries (Linux, macOS, Windows)
+  - Automatically generated changelog
+  - Release artifacts
+
+### Versioning
+
+This project follows [Semantic Versioning (SemVer)](https://semver.org/):
+- **MAJOR**: Incompatible API changes
+- **MINOR**: Backwards-compatible functionality additions  
+- **PATCH**: Backwards-compatible bug fixes
+
+See [VERSIONING.md](VERSIONING.md) for detailed versioning strategy.
+
 ### Contributing
 
 1. Fork the repository
