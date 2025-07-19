@@ -100,7 +100,7 @@ npm install fhirpath-node
 
 ### Command Line Interface
 
-The CLI provides two main commands:
+The CLI provides several commands:
 
 #### Evaluate FHIRPath expressions
 
@@ -119,6 +119,23 @@ aether-fhirpath eval "Patient.name.given" patient.json --format pretty
 # Check if an expression is syntactically valid
 aether-fhirpath validate "Patient.name.given"
 aether-fhirpath validate "Patient.invalid..syntax"
+```
+
+#### Show parsed AST
+
+```bash
+# Display the Abstract Syntax Tree of an expression
+aether-fhirpath ast "Patient.name.given"
+aether-fhirpath ast "Patient.name.given" --format debug
+```
+
+#### Generate shell completions
+
+```bash
+# Generate completion scripts for your shell
+aether-fhirpath completion bash > ~/.bash_completion.d/aether-fhirpath
+aether-fhirpath completion zsh > ~/.zsh/completions/_aether-fhirpath
+aether-fhirpath completion fish > ~/.config/fish/completions/aether-fhirpath.fish
 ```
 
 ### Rust Library

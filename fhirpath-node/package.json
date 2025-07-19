@@ -1,5 +1,5 @@
 {
-  "name": "@aether/fhirpath-node",
+  "name": "@aethers/fhirpath-node",
   "version": "0.1.0",
   "description": "Node.js bindings for FHIRPath Rust implementation",
   "main": "index.cjs",

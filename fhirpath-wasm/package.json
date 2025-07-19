@@ -1,6 +1,6 @@
 {
-  "name": "@aether/fhirpath-wasm",
-  "version": "0.1.0",
+  "name": "@aethers/fhirpath-wasm",
+  "version": "0.1.1",
   "description": "WASM bindings for FHIRPath Rust implementation",
   "main": "pkg/fhirpath_wasm.js",
   "types": "pkg/fhirpath_wasm.d.ts",
@@ -27,6 +27,6 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/octoshikari/aether-fhirpath"
+    "url": "git+https://github.com/octoshikari/aether-fhirpath.git"
   }
 }

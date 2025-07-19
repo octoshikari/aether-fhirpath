@@ -8,6 +8,9 @@ pub mod lexer;
 pub mod model;
 pub mod parser;
 
+#[cfg(test)]
+pub mod debug_tokens;
+
 /// Version of the FHIRPath specification implemented
 pub const FHIRPATH_SPEC_VERSION: &str = "N1";
 

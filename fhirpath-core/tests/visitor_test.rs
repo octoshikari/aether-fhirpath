@@ -48,6 +48,7 @@ impl AstVisitor for CountingVisitor {
             AstNode::NumberLiteral(_) => "NumberLiteral",
             AstNode::BooleanLiteral(_) => "BooleanLiteral",
             AstNode::DateTimeLiteral(_) => "DateTimeLiteral",
+            AstNode::QuantityLiteral { .. } => "QuantityLiteral",
             AstNode::Path(_, _) => "Path",
             AstNode::BinaryOp { .. } => "BinaryOp",
             AstNode::UnaryOp { .. } => "UnaryOp",

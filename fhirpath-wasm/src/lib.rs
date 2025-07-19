@@ -192,6 +192,10 @@ fn format_ast_as_tree(node: &fhirpath_core::parser::AstNode, indent: usize) -> S
             result.push_str(&format!("{}└─ Index:\n", indent_str));
             result.push_str(&format_ast_as_tree(index, indent + 2));
         }
+        AstNode::QuantityLiteral { value, unit } => {
+            let unit_str = unit.as_ref().map(|u| format!(" '{}'", u)).unwrap_or_default();
+            result.push_str(&format!("{}QuantityLiteral: {}{}\n", indent_str, value, unit_str));
+        }
     }
 
     result
@@ -204,6 +208,8 @@ fn format_binary_operator(op: &fhirpath_core::parser::BinaryOperator) -> &'stati
     match op {
         BinaryOperator::Equals => "=",
         BinaryOperator::NotEquals => "!=",
+        BinaryOperator::Equivalent => "~",
+        BinaryOperator::NotEquivalent => "!~",
         BinaryOperator::LessThan => "<",
         BinaryOperator::LessOrEqual => "<=",
         BinaryOperator::GreaterThan => ">",
@@ -212,12 +218,16 @@ fn format_binary_operator(op: &fhirpath_core::parser::BinaryOperator) -> &'stati
         BinaryOperator::Subtraction => "-",
         BinaryOperator::Multiplication => "*",
         BinaryOperator::Division => "/",
+        BinaryOperator::Div => "div",
         BinaryOperator::Mod => "mod",
         BinaryOperator::And => "and",
         BinaryOperator::Or => "or",
         BinaryOperator::Xor => "xor",
         BinaryOperator::Implies => "implies",
         BinaryOperator::In => "in",
+        BinaryOperator::Contains => "contains",
+        BinaryOperator::Is => "is",
+        BinaryOperator::As => "as",
         BinaryOperator::Union => "|",
         BinaryOperator::Concatenation => "&",
     }
@@ -228,8 +238,9 @@ fn format_unary_operator(op: &fhirpath_core::parser::UnaryOperator) -> &'static 
     use fhirpath_core::parser::UnaryOperator;
 
     match op {
-        UnaryOperator::Not => "not",
+        UnaryOperator::Positive => "+",
         UnaryOperator::Negate => "-",
+        UnaryOperator::Not => "not",
     }
 }
 

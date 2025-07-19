@@ -749,17 +749,17 @@ fn execute_test(test: &Test, input_data: &Value) -> Result<bool, Box<dyn std::er
         }
     }
 
-    println!(
-        "Test PASSED: {} - Expression: {} - Result: {:?}",
-        test.name, expression, result
-    );
+    // println!(
+    //     "Test PASSED: {} - Expression: {} - Result: {:?}",
+    //     test.name, expression, result
+    // );
     Ok(true)
 }
 
 /// Run a subset of tests for initial validation
 #[test]
 fn test_official_fhirpath_basic_tests() {
-    // For now, let's test with our existing patient fixture
+    // For now, let's test it with our existing patient fixture
     let patient_json = fs::read_to_string("tests/fixtures/patient-example.json")
         .expect("Failed to read patient fixture");
     let patient_data: Value =
@@ -979,7 +979,8 @@ fn run_official_fhirpath_tests() {
                     Ok(true) => {
                         passed += 1;
                         group_passed += 1;
-                        println!("  ✓ {}", test.name);
+                        // TODO: enable later
+                        // println!("  ✓ {}", test.name);
                     }
                     Ok(false) => {
                         failed += 1;

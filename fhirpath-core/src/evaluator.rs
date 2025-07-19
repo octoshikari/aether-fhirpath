@@ -256,6 +256,26 @@ impl AstVisitor for NoopVisitor {
     }
 }
 
+/// Returns the FHIRPath type name for a given value
+fn get_fhirpath_type_name(value: &FhirPathValue) -> String {
+    match value {
+        FhirPathValue::Empty => "Empty".to_string(),
+        FhirPathValue::Boolean(_) => "Boolean".to_string(),
+        FhirPathValue::Integer(_) => "Integer".to_string(),
+        FhirPathValue::Decimal(_) => "Decimal".to_string(),
+        FhirPathValue::String(_) => "String".to_string(),
+        FhirPathValue::Date(_) => "Date".to_string(),
+        FhirPathValue::DateTime(_) => "DateTime".to_string(),
+        FhirPathValue::Time(_) => "Time".to_string(),
+        FhirPathValue::Quantity { .. } => "Quantity".to_string(),
+        FhirPathValue::Collection(_) => "Collection".to_string(),
+        FhirPathValue::Resource(resource) => {
+            // Return the resource type if available, otherwise "Resource"
+            resource.resource_type.clone().unwrap_or_else(|| "Resource".to_string())
+        }
+    }
+}
+
 /// Evaluates a FHIRPath expression AST
 pub fn evaluate_ast(
     node: &AstNode,
@@ -328,6 +348,32 @@ fn evaluate_ast_internal_uncached(
 ) -> Result<FhirPathValue, FhirPathError> {
     match node {
         AstNode::Identifier(name) => {
+            // Check for special invocations first
+            match name.as_str() {
+                "$this" => {
+                    if let Some(this_value) = context.get_this() {
+                        return Ok(this_value.clone());
+                    } else {
+                        return Ok(FhirPathValue::Empty);
+                    }
+                }
+                "$index" => {
+                    if let Some(index) = context.get_index() {
+                        return Ok(FhirPathValue::Integer(index as i64));
+                    } else {
+                        return Ok(FhirPathValue::Empty);
+                    }
+                }
+                "$total" => {
+                    if let Some(total) = context.get_total() {
+                        return Ok(FhirPathValue::Integer(total as i64));
+                    } else {
+                        return Ok(FhirPathValue::Empty);
+                    }
+                }
+                _ => {}
+            }
+
             // Check if it's a variable
             if let Some(value) = context.get_variable(name) {
                 return Ok(value.clone());
@@ -335,8 +381,32 @@ fn evaluate_ast_internal_uncached(
 
             // Check if we have a FhirResource in this_item and access its properties directly
             if let Some(FhirPathValue::Resource(resource)) = &context.this_item {
+                // First try direct property access
                 if let Some(value) = resource.properties.get(name) {
                     return json_to_fhirpath_value(value.clone());
+                }
+
+                // Handle FHIR polymorphic properties (e.g., "value" -> "valueQuantity", "valueString", etc.)
+                if name == "value" {
+                    // Look for polymorphic value properties
+                    let polymorphic_prefixes = ["value"];
+                    for prefix in &polymorphic_prefixes {
+                        for (prop_name, prop_value) in &resource.properties {
+                            if prop_name.starts_with(prefix) && prop_name.len() > prefix.len() {
+                                // Found a polymorphic property like "valueQuantity"
+                                return json_to_fhirpath_value(prop_value.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Check if we have a Quantity in this_item and access its properties directly
+            if let Some(FhirPathValue::Quantity { value, unit }) = &context.this_item {
+                match name.as_str() {
+                    "value" => return Ok(FhirPathValue::Decimal(*value)),
+                    "unit" => return Ok(FhirPathValue::String(unit.clone())),
+                    _ => {} // Fall through to other property access logic
                 }
             }
 
@@ -415,6 +485,22 @@ fn evaluate_ast_internal_uncached(
                             .map_err(FhirPathError::JsonError)?,
                         variables: context.variables.clone(),
                         this_item: Some(FhirPathValue::Resource(resource)),
+                        index: None,
+                        total: None,
+                        optimization_enabled: context.optimization_enabled,
+                        expression_cache: HashMap::new(),
+                    };
+
+                    // Evaluate the right side in the new context
+                    evaluate_ast_with_visitor(right, &new_context, visitor)
+                }
+                FhirPathValue::Quantity { value, unit } => {
+                    // Create a new context with the Quantity as this_item
+                    let new_context = EvaluationContext {
+                        resource: context.resource.clone(),
+                        context: context.context.clone(),
+                        variables: context.variables.clone(),
+                        this_item: Some(FhirPathValue::Quantity { value, unit }),
                         index: None,
                         total: None,
                         optimization_enabled: context.optimization_enabled,
@@ -605,6 +691,14 @@ fn evaluate_ast_internal_uncached(
                     &left_result,
                     &right_result,
                 ))),
+                BinaryOperator::Equivalent => Ok(FhirPathValue::Boolean(values_equivalent(
+                    &left_result,
+                    &right_result,
+                ))),
+                BinaryOperator::NotEquivalent => Ok(FhirPathValue::Boolean(!values_equivalent(
+                    &left_result,
+                    &right_result,
+                ))),
                 BinaryOperator::LessThan => {
                     compare_values(&left_result, &right_result, |a, b| a < b)
                 }
@@ -718,6 +812,66 @@ fn evaluate_ast_internal_uncached(
                         Ok(FhirPathValue::Collection(result_items))
                     }
                 }
+                BinaryOperator::Div => {
+                    // Integer division
+                    match (left_result, right_result) {
+                        (FhirPathValue::Integer(a), FhirPathValue::Integer(b)) => {
+                            if b == 0 {
+                                Err(FhirPathError::EvaluationError("Division by zero".to_string()))
+                            } else {
+                                Ok(FhirPathValue::Integer(a / b))
+                            }
+                        }
+                        _ => Err(FhirPathError::TypeError(
+                            "'div' operator requires integer operands".to_string(),
+                        )),
+                    }
+                }
+                BinaryOperator::Contains => {
+                    // 'contains' operator checks if left operand collection contains right operand
+                    match left_result {
+                        FhirPathValue::Collection(items) => {
+                            let found = items.iter().any(|item| values_equal(item, &right_result));
+                            Ok(FhirPathValue::Boolean(found))
+                        }
+                        FhirPathValue::Empty => Ok(FhirPathValue::Boolean(false)),
+                        other => {
+                            // Single item on left side
+                            Ok(FhirPathValue::Boolean(values_equal(&other, &right_result)))
+                        }
+                    }
+                }
+                BinaryOperator::Is => {
+                    // 'is' operator checks if left operand is of the type specified by right operand
+                    let type_name = match right_result {
+                        FhirPathValue::String(ref type_str) => type_str.clone(),
+                        _ => {
+                            // If right operand is not a string, check if the right side is an identifier
+                            // by looking at the original AST node
+                            match **right {
+                                AstNode::Identifier(ref identifier_name) => {
+                                    // Handle qualified identifiers (e.g., FHIR.Patient -> Patient)
+                                    if let Some(last_part) = identifier_name.split('.').last() {
+                                        last_part.to_string()
+                                    } else {
+                                        identifier_name.clone()
+                                    }
+                                }
+                                _ => {
+                                    return Ok(FhirPathValue::Boolean(false));
+                                }
+                            }
+                        }
+                    };
+
+                    let actual_type = get_fhirpath_type_name(&left_result);
+                    Ok(FhirPathValue::Boolean(actual_type == type_name))
+                }
+                BinaryOperator::As => {
+                    // 'as' operator casts left operand to the type specified by right operand
+                    // For now, return the left operand unchanged
+                    Ok(left_result)
+                }
                 BinaryOperator::Concatenation => {
                     // Concatenation operator (&) converts operands to strings and concatenates them
                     let left_str = match left_result {
@@ -761,6 +915,13 @@ fn evaluate_ast_internal_uncached(
 
             // Perform the operation
             match op {
+                UnaryOperator::Positive => match operand_result {
+                    FhirPathValue::Integer(value) => Ok(FhirPathValue::Integer(value)),
+                    FhirPathValue::Decimal(value) => Ok(FhirPathValue::Decimal(value)),
+                    _ => Err(FhirPathError::TypeError(
+                        "Positive operator requires numeric operand".to_string(),
+                    )),
+                },
                 UnaryOperator::Negate => match operand_result {
                     FhirPathValue::Integer(value) => Ok(FhirPathValue::Integer(-value)),
                     FhirPathValue::Decimal(value) => Ok(FhirPathValue::Decimal(-value)),
@@ -777,6 +938,13 @@ fn evaluate_ast_internal_uncached(
                     _ => Ok(FhirPathValue::Boolean(false)),
                 },
             }
+        }
+
+        AstNode::QuantityLiteral { value, unit } => {
+            Ok(FhirPathValue::Quantity {
+                value: *value,
+                unit: unit.clone().unwrap_or_default(),
+            })
         }
     }
 }
@@ -1063,6 +1231,24 @@ fn json_to_fhirpath_value(value: serde_json::Value) -> Result<FhirPathValue, Fhi
             if obj.contains_key("resourceType") {
                 let resource = FhirResource::from_json(serde_json::Value::Object(obj))?;
                 Ok(FhirPathValue::Resource(resource))
+            } else if obj.contains_key("value") && obj.contains_key("unit") {
+                // This looks like a FHIR Quantity object
+                let value = obj.get("value")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let unit = obj.get("unit")
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                Ok(FhirPathValue::Quantity { value, unit })
+            } else if obj.contains_key("value") && obj.len() <= 2 {
+                // This looks like a FHIR primitive type with a "value" property
+                // Extract the actual value instead of wrapping as a Resource
+                if let Some(value) = obj.get("value") {
+                    json_to_fhirpath_value(value.clone())
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
             } else {
                 // Convert to a resource without a resourceType
                 let resource = FhirResource {
@@ -1198,6 +1384,68 @@ where
                 normalized_a.cmp(&normalized_b) as i32 as f64,
                 0.0,
             )))
+        }
+
+        // String to Date/DateTime comparisons (for FHIR primitive values)
+        (FhirPathValue::String(a), FhirPathValue::Date(b)) => {
+            // Try to parse string as date and compare
+            if is_valid_datetime_string(a) {
+                let normalized_a = normalize_datetime(a);
+                let normalized_b = normalize_datetime(b);
+                Ok(FhirPathValue::Boolean(compare_fn(
+                    normalized_a.cmp(&normalized_b) as i32 as f64,
+                    0.0,
+                )))
+            } else {
+                Err(FhirPathError::TypeError(format!(
+                    "Cannot compare string '{}' with date '{}'", a, b
+                )))
+            }
+        }
+        (FhirPathValue::Date(a), FhirPathValue::String(b)) => {
+            // Try to parse string as date and compare
+            if is_valid_datetime_string(b) {
+                let normalized_a = normalize_datetime(a);
+                let normalized_b = normalize_datetime(b);
+                Ok(FhirPathValue::Boolean(compare_fn(
+                    normalized_a.cmp(&normalized_b) as i32 as f64,
+                    0.0,
+                )))
+            } else {
+                Err(FhirPathError::TypeError(format!(
+                    "Cannot compare date '{}' with string '{}'", a, b
+                )))
+            }
+        }
+        (FhirPathValue::String(a), FhirPathValue::DateTime(b)) => {
+            // Try to parse string as datetime and compare
+            if is_valid_datetime_string(a) {
+                let normalized_a = normalize_datetime(a);
+                let normalized_b = normalize_datetime(b);
+                Ok(FhirPathValue::Boolean(compare_fn(
+                    normalized_a.cmp(&normalized_b) as i32 as f64,
+                    0.0,
+                )))
+            } else {
+                Err(FhirPathError::TypeError(format!(
+                    "Cannot compare string '{}' with datetime '{}'", a, b
+                )))
+            }
+        }
+        (FhirPathValue::DateTime(a), FhirPathValue::String(b)) => {
+            // Try to parse string as datetime and compare
+            if is_valid_datetime_string(b) {
+                let normalized_a = normalize_datetime(a);
+                let normalized_b = normalize_datetime(b);
+                Ok(FhirPathValue::Boolean(compare_fn(
+                    normalized_a.cmp(&normalized_b) as i32 as f64,
+                    0.0,
+                )))
+            } else {
+                Err(FhirPathError::TypeError(format!(
+                    "Cannot compare datetime '{}' with string '{}'", a, b
+                )))
+            }
         }
 
         // Quantity comparisons
@@ -1338,8 +1586,110 @@ where
 
         // Empty value comparisons
         (FhirPathValue::Empty, _) | (_, FhirPathValue::Empty) => {
-            // Empty values are considered less than any other value
-            Ok(FhirPathValue::Boolean(compare_fn(-1.0, 0.0)))
+            // In FHIRPath, comparisons involving empty values return empty
+            Ok(FhirPathValue::Empty)
+        }
+
+        // Single value vs collection comparisons
+        (single_value, FhirPathValue::Collection(items)) => {
+            // Check if the single value compares with any item in the collection
+            for item in items {
+                // Use direct comparison logic to avoid recursion issues
+                let comparison_result = match (single_value, item) {
+                    // Direct numeric comparisons
+                    (FhirPathValue::Integer(a), FhirPathValue::Integer(b)) => {
+                        compare_fn(*a as f64, *b as f64)
+                    }
+                    (FhirPathValue::Integer(a), FhirPathValue::Decimal(b)) => {
+                        compare_fn(*a as f64, *b)
+                    }
+                    (FhirPathValue::Decimal(a), FhirPathValue::Integer(b)) => {
+                        compare_fn(*a, *b as f64)
+                    }
+                    (FhirPathValue::Decimal(a), FhirPathValue::Decimal(b)) => {
+                        compare_fn(*a, *b)
+                    }
+                    // String comparisons
+                    (FhirPathValue::String(a), FhirPathValue::String(b)) => {
+                        compare_fn(a.cmp(b) as i32 as f64, 0.0)
+                    }
+                    // Boolean comparisons
+                    (FhirPathValue::Boolean(a), FhirPathValue::Boolean(b)) => {
+                        let a_val = if *a { 1.0 } else { 0.0 };
+                        let b_val = if *b { 1.0 } else { 0.0 };
+                        compare_fn(a_val, b_val)
+                    }
+                    // Date/DateTime comparisons
+                    (FhirPathValue::Date(a), FhirPathValue::Date(b)) => {
+                        let normalized_a = normalize_datetime(a);
+                        let normalized_b = normalize_datetime(b);
+                        compare_fn(normalized_a.cmp(&normalized_b) as i32 as f64, 0.0)
+                    }
+                    (FhirPathValue::DateTime(a), FhirPathValue::DateTime(b)) => {
+                        let normalized_a = normalize_datetime(a);
+                        let normalized_b = normalize_datetime(b);
+                        compare_fn(normalized_a.cmp(&normalized_b) as i32 as f64, 0.0)
+                    }
+                    // Skip other types for now
+                    _ => false,
+                };
+
+                if comparison_result {
+                    return Ok(FhirPathValue::Boolean(true));
+                }
+            }
+            // If no item matched, return false
+            Ok(FhirPathValue::Boolean(false))
+        }
+        (FhirPathValue::Collection(items), single_value) => {
+            // Check if any item in the collection compares with the single value
+            for item in items {
+                // Use direct comparison logic to avoid recursion issues
+                let comparison_result = match (item, single_value) {
+                    // Direct numeric comparisons
+                    (FhirPathValue::Integer(a), FhirPathValue::Integer(b)) => {
+                        compare_fn(*a as f64, *b as f64)
+                    }
+                    (FhirPathValue::Integer(a), FhirPathValue::Decimal(b)) => {
+                        compare_fn(*a as f64, *b)
+                    }
+                    (FhirPathValue::Decimal(a), FhirPathValue::Integer(b)) => {
+                        compare_fn(*a, *b as f64)
+                    }
+                    (FhirPathValue::Decimal(a), FhirPathValue::Decimal(b)) => {
+                        compare_fn(*a, *b)
+                    }
+                    // String comparisons
+                    (FhirPathValue::String(a), FhirPathValue::String(b)) => {
+                        compare_fn(a.cmp(b) as i32 as f64, 0.0)
+                    }
+                    // Boolean comparisons
+                    (FhirPathValue::Boolean(a), FhirPathValue::Boolean(b)) => {
+                        let a_val = if *a { 1.0 } else { 0.0 };
+                        let b_val = if *b { 1.0 } else { 0.0 };
+                        compare_fn(a_val, b_val)
+                    }
+                    // Date/DateTime comparisons
+                    (FhirPathValue::Date(a), FhirPathValue::Date(b)) => {
+                        let normalized_a = normalize_datetime(a);
+                        let normalized_b = normalize_datetime(b);
+                        compare_fn(normalized_a.cmp(&normalized_b) as i32 as f64, 0.0)
+                    }
+                    (FhirPathValue::DateTime(a), FhirPathValue::DateTime(b)) => {
+                        let normalized_a = normalize_datetime(a);
+                        let normalized_b = normalize_datetime(b);
+                        compare_fn(normalized_a.cmp(&normalized_b) as i32 as f64, 0.0)
+                    }
+                    // Skip other types for now
+                    _ => false,
+                };
+
+                if comparison_result {
+                    return Ok(FhirPathValue::Boolean(true));
+                }
+            }
+            // If no item matched, return false
+            Ok(FhirPathValue::Boolean(false))
         }
 
         // Fallback for incompatible types
@@ -1476,6 +1826,9 @@ fn evaluate_function_call(
     context: &EvaluationContext,
     visitor: &dyn AstVisitor,
 ) -> Result<FhirPathValue, FhirPathError> {
+    if name.contains("converts") {
+        println!("[DEBUG] Function call: {}", name);
+    }
     match name {
         // Collection filtering and projection functions
         "where" => evaluate_where_function(arguments, context, visitor),
@@ -1496,9 +1849,22 @@ fn evaluate_function_call(
 
         // Collection aggregation functions
         "distinct" => evaluate_distinct_function(arguments, context),
+        "isDistinct" => evaluate_is_distinct_function(arguments, context),
         "union" => evaluate_union_function(arguments, context),
+        "combine" => evaluate_combine_function(arguments, context),
         "intersect" => evaluate_intersect_function(arguments, context),
         "subsetOf" => evaluate_subset_of_function(arguments, context, visitor),
+        "supersetOf" => evaluate_superset_of_function(arguments, context, visitor),
+        "single" => evaluate_single_function(arguments, context),
+
+        // Tree navigation functions
+        "descendants" => evaluate_descendants_function(arguments, context),
+
+        // Debugging functions
+        "trace" => evaluate_trace_function(arguments, context, visitor),
+
+        // Aggregation functions
+        "aggregate" => evaluate_aggregate_function(arguments, context, visitor),
 
         // Type checking functions
         "is" => evaluate_is_function(arguments, context),
@@ -1514,6 +1880,11 @@ fn evaluate_function_call(
         "matches" => evaluate_matches_function(arguments, context),
         "split" => evaluate_split_function(arguments, context, visitor),
         "join" => evaluate_join_function(arguments, context, visitor),
+        "toChars" => evaluate_to_chars_function(arguments, context, visitor),
+        "escape" => evaluate_escape_function(arguments, context, visitor),
+        "unescape" => evaluate_unescape_function(arguments, context, visitor),
+        "upper" => evaluate_upper_function(arguments, context, visitor),
+        "lower" => evaluate_lower_function(arguments, context, visitor),
 
         // Math functions
         "abs" => evaluate_abs_function(arguments, context, visitor),
@@ -1550,6 +1921,24 @@ fn evaluate_function_call(
             evaluate_converts_to_date_time_function(arguments, context, visitor)
         }
         "convertsToQuantity" => evaluate_converts_to_quantity_function(arguments, context, visitor),
+        "convertsToTime" => evaluate_converts_to_time_function(arguments, context, visitor),
+        "toString" => evaluate_to_string_function(arguments, context, visitor),
+        "toInteger" => evaluate_to_integer_function(arguments, context, visitor),
+        "toDecimal" => evaluate_to_decimal_function(arguments, context, visitor),
+        "toQuantity" => evaluate_to_quantity_function(arguments, context, visitor),
+        "toBoolean" => evaluate_to_boolean_function(arguments, context, visitor),
+
+        // Tree navigation functions
+        "children" => evaluate_children_function(arguments, context, visitor),
+        "repeat" => evaluate_repeat_function(arguments, context, visitor),
+
+        // String manipulation functions
+        "trim" => evaluate_trim_function(arguments, context, visitor),
+        "encode" => evaluate_encode_function(arguments, context, visitor),
+        "decode" => evaluate_decode_function(arguments, context, visitor),
+
+        // Conditional functions
+        "iif" => evaluate_iif_function(arguments, context, visitor),
 
         // Type and metadata functions
         "type" => evaluate_type_function(arguments, context, visitor),
@@ -1902,7 +2291,28 @@ fn evaluate_length_function(
         )));
     }
 
-    // Get the current value from context
+    // Get the current value - check this_item first (for method calls like "string".length())
+    if let Some(this_item) = &context.this_item {
+        match this_item {
+            FhirPathValue::String(s) => return Ok(FhirPathValue::Integer(s.len() as i64)),
+            FhirPathValue::Collection(items) if items.len() == 1 => {
+                if let FhirPathValue::String(s) = &items[0] {
+                    return Ok(FhirPathValue::Integer(s.len() as i64));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Fallback to checking the current collection
+    let collection = get_current_collection(context)?;
+    if collection.len() == 1 {
+        if let FhirPathValue::String(s) = &collection[0] {
+            return Ok(FhirPathValue::Integer(s.len() as i64));
+        }
+    }
+
+    // Last fallback: check raw JSON context for direct string values
     match &context.context {
         serde_json::Value::String(s) => Ok(FhirPathValue::Integer(s.len() as i64)),
         _ => Err(FhirPathError::TypeError(
@@ -1942,14 +2352,376 @@ fn evaluate_distinct_function(
     }
 }
 
-/// Placeholder implementations for remaining functions
-fn evaluate_union_function(
-    _arguments: &[AstNode],
-    _context: &EvaluationContext,
+/// Evaluates the isDistinct() function - returns true if all items in collection are distinct
+fn evaluate_is_distinct_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
 ) -> Result<FhirPathValue, FhirPathError> {
-    Err(FhirPathError::NotImplemented(
-        "'union' function not yet implemented".to_string(),
-    ))
+    if !arguments.is_empty() {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'isDistinct' function expects 0 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let collection = get_current_collection(context)?;
+
+    // Check if all items are distinct by comparing each item with all others
+    for (i, item1) in collection.iter().enumerate() {
+        for (j, item2) in collection.iter().enumerate() {
+            if i != j && values_equal(item1, item2) {
+                // Found duplicate items
+                return Ok(FhirPathValue::Boolean(false));
+            }
+        }
+    }
+
+    // All items are distinct
+    Ok(FhirPathValue::Boolean(true))
+}
+
+/// Evaluates the descendants() function - returns all descendant elements in a FHIR resource
+fn evaluate_descendants_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+) -> Result<FhirPathValue, FhirPathError> {
+    if !arguments.is_empty() {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'descendants' function expects 0 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let collection = get_current_collection(context)?;
+    let mut descendants = Vec::new();
+
+    // For each item in the collection, get all its descendants
+    for item in collection {
+        match item {
+            FhirPathValue::Resource(resource) => {
+                // Recursively collect all descendants from the resource
+                collect_descendants_from_resource(&resource, &mut descendants);
+            }
+            _ => {
+                // Non-resource items don't have descendants
+                continue;
+            }
+        }
+    }
+
+    if descendants.is_empty() {
+        Ok(FhirPathValue::Empty)
+    } else {
+        Ok(FhirPathValue::Collection(descendants))
+    }
+}
+
+/// Helper function to recursively collect descendants from a FHIR resource
+fn collect_descendants_from_resource(resource: &crate::model::FhirResource, descendants: &mut Vec<FhirPathValue>) {
+    // Add all properties of this resource as descendants
+    for (_, value) in &resource.properties {
+        match json_to_fhirpath_value(value.clone()) {
+            Ok(fhir_value) => {
+                match fhir_value {
+                    FhirPathValue::Resource(child_resource) => {
+                        // Add the child resource itself
+                        descendants.push(FhirPathValue::Resource(child_resource.clone()));
+                        // Recursively collect descendants from the child resource
+                        collect_descendants_from_resource(&child_resource, descendants);
+                    }
+                    FhirPathValue::Collection(items) => {
+                        // Add each item in the collection and their descendants
+                        for item in items {
+                            descendants.push(item.clone());
+                            if let FhirPathValue::Resource(child_resource) = item {
+                                collect_descendants_from_resource(&child_resource, descendants);
+                            }
+                        }
+                    }
+                    other => {
+                        // Add primitive values as descendants
+                        descendants.push(other);
+                    }
+                }
+            }
+            Err(_) => {
+                // Skip values that can't be converted
+                continue;
+            }
+        }
+    }
+}
+
+/// Evaluates the children() function - returns direct child elements in a FHIR resource
+fn evaluate_children_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if !arguments.is_empty() {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'children' function expects 0 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let collection = get_current_collection(context)?;
+    let mut children = Vec::new();
+
+    // For each item in the collection, get its direct children
+    for item in collection {
+        match item {
+            FhirPathValue::Resource(resource) => {
+                // Collect direct children from the resource (no recursion)
+                collect_children_from_resource(&resource, &mut children);
+            }
+            _ => {
+                // Non-resource items don't have children
+                continue;
+            }
+        }
+    }
+
+    if children.is_empty() {
+        Ok(FhirPathValue::Empty)
+    } else {
+        Ok(FhirPathValue::Collection(children))
+    }
+}
+
+/// Helper function to collect direct children from a FHIR resource (non-recursive)
+fn collect_children_from_resource(resource: &crate::model::FhirResource, children: &mut Vec<FhirPathValue>) {
+    // Add all properties of this resource as direct children (no recursion)
+    for (_, value) in &resource.properties {
+        match json_to_fhirpath_value(value.clone()) {
+            Ok(fhir_value) => {
+                match fhir_value {
+                    FhirPathValue::Resource(child_resource) => {
+                        // Add the child resource itself (but don't recurse)
+                        children.push(FhirPathValue::Resource(child_resource));
+                    }
+                    FhirPathValue::Collection(items) => {
+                        // Add each item in the collection (but don't recurse)
+                        for item in items {
+                            children.push(item);
+                        }
+                    }
+                    other => {
+                        // Add primitive values as children
+                        children.push(other);
+                    }
+                }
+            }
+            Err(_) => {
+                // Skip values that can't be converted
+                continue;
+            }
+        }
+    }
+}
+
+/// Evaluates the repeat() function - repeatedly applies an expression until no new items are found
+fn evaluate_repeat_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 1 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'repeat' function expects 1 argument, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let mut current_collection = get_current_collection(context)?;
+    let mut all_results = Vec::new();
+    let mut seen_items = std::collections::HashSet::new();
+
+    // Add initial items to results and seen set
+    for item in &current_collection {
+        let hash = calculate_value_hash(item);
+        if seen_items.insert(hash) {
+            all_results.push(item.clone());
+        }
+    }
+
+    // Repeatedly apply the expression until no new items are found
+    loop {
+        let mut new_items = Vec::new();
+        let mut found_new = false;
+
+        // Apply the expression to each item in the current collection
+        for item in &current_collection {
+            let item_context = context.create_iteration_context(item.clone(), 0, 1)?;
+            let result = evaluate_ast_with_visitor(&arguments[0], &item_context, visitor)?;
+
+            // Collect results from this iteration
+            match result {
+                FhirPathValue::Collection(items) => {
+                    for new_item in items {
+                        let hash = calculate_value_hash(&new_item);
+                        if seen_items.insert(hash) {
+                            new_items.push(new_item.clone());
+                            all_results.push(new_item);
+                            found_new = true;
+                        }
+                    }
+                }
+                FhirPathValue::Empty => {
+                    // No new items from this iteration
+                }
+                single_item => {
+                    let hash = calculate_value_hash(&single_item);
+                    if seen_items.insert(hash) {
+                        new_items.push(single_item.clone());
+                        all_results.push(single_item);
+                        found_new = true;
+                    }
+                }
+            }
+        }
+
+        // If no new items were found, we're done
+        if !found_new {
+            break;
+        }
+
+        // Update current collection for next iteration
+        current_collection = new_items;
+    }
+
+    if all_results.is_empty() {
+        Ok(FhirPathValue::Empty)
+    } else {
+        Ok(FhirPathValue::Collection(all_results))
+    }
+}
+
+/// Helper function to calculate a hash for a FhirPathValue for deduplication
+fn calculate_value_hash(value: &FhirPathValue) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+
+    // Create a string representation for hashing
+    let hash_string = match value {
+        FhirPathValue::String(s) => format!("string:{}", s),
+        FhirPathValue::Integer(i) => format!("integer:{}", i),
+        FhirPathValue::Decimal(d) => format!("decimal:{}", d),
+        FhirPathValue::Boolean(b) => format!("boolean:{}", b),
+        FhirPathValue::Date(d) => format!("date:{}", d),
+        FhirPathValue::DateTime(dt) => format!("datetime:{}", dt),
+        FhirPathValue::Time(t) => format!("time:{}", t),
+        FhirPathValue::Quantity { value, unit } => format!("quantity:{}:{}", value, unit),
+        FhirPathValue::Resource(r) => format!("resource:{}", r.resource_type.as_deref().unwrap_or("unknown")),
+        FhirPathValue::Collection(_) => "collection".to_string(),
+        FhirPathValue::Empty => "empty".to_string(),
+    };
+
+    hash_string.hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Union function - merges collections removing duplicates
+fn evaluate_union_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 1 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'union' function expects 1 argument, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let current_collection = get_current_collection(context)?;
+
+    // Evaluate the argument to get the other collection
+    let visitor = NoopVisitor::new();
+    let other_result = evaluate_ast_with_visitor(&arguments[0], context, &visitor)?;
+    let other_collection = match other_result {
+        FhirPathValue::Collection(items) => items,
+        FhirPathValue::Empty => vec![],
+        single_item => vec![single_item],
+    };
+
+    // Create union - start with current collection items
+    let mut union_items = Vec::new();
+
+    // Add all items from current collection
+    for item in &current_collection {
+        union_items.push(item.clone());
+    }
+
+    // Add items from other collection that are not already present
+    for other_item in &other_collection {
+        let mut already_present = false;
+        for existing_item in &union_items {
+            if values_equal(other_item, existing_item) {
+                already_present = true;
+                break;
+            }
+        }
+        if !already_present {
+            union_items.push(other_item.clone());
+        }
+    }
+
+    if union_items.is_empty() {
+        Ok(FhirPathValue::Empty)
+    } else {
+        Ok(FhirPathValue::Collection(union_items))
+    }
+}
+
+/// Combine function - merges collections keeping all duplicates
+fn evaluate_combine_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 1 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'combine' function expects 1 argument, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let current_collection = get_current_collection(context)?;
+
+    // Evaluate the argument to get the other collection
+    let visitor = NoopVisitor::new();
+    let other_result = evaluate_ast_with_visitor(&arguments[0], context, &visitor)?;
+    let other_collection = match other_result {
+        FhirPathValue::Collection(items) => items,
+        FhirPathValue::Empty => vec![],
+        single_item => vec![single_item],
+    };
+
+    // Create combined collection - add all items from both collections (keeping duplicates)
+    let mut combined_items = Vec::new();
+
+    // Add all items from current collection
+    for item in &current_collection {
+        combined_items.push(item.clone());
+    }
+
+    // Add all items from other collection (including duplicates)
+    for item in &other_collection {
+        combined_items.push(item.clone());
+    }
+
+    if combined_items.is_empty() {
+        Ok(FhirPathValue::Empty)
+    } else {
+        Ok(FhirPathValue::Collection(combined_items))
+    }
 }
 
 fn evaluate_intersect_function(
@@ -3937,14 +4709,68 @@ fn evaluate_converts_to_date_function(
         )));
     };
 
+    println!("[DEBUG] convertsToDate: result type = {:?}", std::mem::discriminant(&result));
+
     let can_convert = match result {
-        FhirPathValue::Date(_) => true,
-        FhirPathValue::DateTime(_) => true,
-        FhirPathValue::String(s) => {
-            // Basic date format validation
-            s.len() >= 4 && s.chars().take(4).all(|c| c.is_ascii_digit())
+        FhirPathValue::Date(_) => {
+            println!("[DEBUG] convertsToDate: Found Date value");
+            true
         }
-        _ => false,
+        FhirPathValue::DateTime(_) => {
+            println!("[DEBUG] convertsToDate: Found DateTime value");
+            true
+        }
+        FhirPathValue::String(s) => {
+            println!("[DEBUG] convertsToDate: Found String value: '{}'", s);
+            // Use comprehensive date validation that handles YYYY, YYYY-MM, YYYY-MM-DD formats
+            let is_valid_dt = is_valid_datetime_string(&s);
+            let has_no_t = !s.contains('T');
+            println!("[DEBUG] convertsToDate: '{}' -> is_valid_datetime_string: {}, !contains('T'): {}, length: {}", s, is_valid_dt, has_no_t, s.len());
+
+            // Debug the validation step by step
+            if !is_valid_dt {
+                println!("[DEBUG] convertsToDate: '{}' failed datetime validation", s);
+                if s.len() >= 4 {
+                    let year_part = &s[0..4];
+                    let year_valid = year_part.chars().all(|c| c.is_ascii_digit());
+                    println!("[DEBUG] convertsToDate: year_part '{}' valid: {}", year_part, year_valid);
+
+                    if s.len() == 7 && s.chars().nth(4) == Some('-') {
+                        let month_part = &s[5..7];
+                        let month_valid = month_part.chars().all(|c| c.is_ascii_digit());
+                        let month: u32 = month_part.parse().unwrap_or(0);
+                        let month_range_valid = month >= 1 && month <= 12;
+                        println!("[DEBUG] convertsToDate: month_part '{}' valid: {}, value: {}, range_valid: {}", month_part, month_valid, month, month_range_valid);
+                    }
+                }
+            }
+
+            is_valid_dt && has_no_t // Date only, not DateTime
+        }
+        FhirPathValue::Collection(ref items) => {
+            println!("[DEBUG] convertsToDate: Found Collection with {} items", items.len());
+            if items.len() == 1 {
+                match &items[0] {
+                    FhirPathValue::String(s) => {
+                        println!("[DEBUG] convertsToDate: Collection contains String: '{}'", s);
+                        let is_valid_dt = is_valid_datetime_string(s);
+                        let has_no_t = !s.contains('T');
+                        println!("[DEBUG] convertsToDate: '{}' -> is_valid_datetime_string: {}, !contains('T'): {}", s, is_valid_dt, has_no_t);
+                        is_valid_dt && has_no_t
+                    }
+                    _ => {
+                        println!("[DEBUG] convertsToDate: Collection contains non-string: {:?}", items[0]);
+                        false
+                    }
+                }
+            } else {
+                false
+            }
+        }
+        _ => {
+            println!("[DEBUG] convertsToDate: Found other type: {:?}", result);
+            false
+        }
     };
 
     Ok(FhirPathValue::Boolean(can_convert))
@@ -4038,6 +4864,38 @@ fn evaluate_converts_to_quantity_function(
     Ok(FhirPathValue::Boolean(can_convert))
 }
 
+/// Evaluates the convertsToTime() function
+fn evaluate_converts_to_time_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let result = if arguments.is_empty() {
+        // Use current context value when no arguments provided
+        json_to_fhirpath_value(context.context.clone())?
+    } else if arguments.len() == 1 {
+        evaluate_ast_with_visitor(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'convertsToTime' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    let can_convert = match result {
+        FhirPathValue::Time(_) => true,
+        FhirPathValue::String(s) => {
+            // Use comprehensive time validation that handles HH, HH:MM, HH:MM:SS formats
+            let is_valid_time = is_valid_time_string(&s);
+            println!("[DEBUG] convertsToTime: '{}' -> is_valid_time_string: {}", s, is_valid_time);
+            is_valid_time
+        }
+        _ => false,
+    };
+
+    Ok(FhirPathValue::Boolean(can_convert))
+}
+
 /// Helper function to get the current collection from context
 fn get_current_collection(
     context: &EvaluationContext,
@@ -4075,7 +4933,7 @@ fn is_truthy(value: &FhirPathValue) -> bool {
 }
 
 /// Helper function to validate datetime string formats
-fn is_valid_datetime_string(s: &str) -> bool {
+pub fn is_valid_datetime_string(s: &str) -> bool {
     // Valid datetime formats according to FhirPath specification:
     // YYYY
     // YYYY-MM
@@ -4330,6 +5188,99 @@ fn datetime_equal(a: &str, b: &str) -> bool {
     normalized_a == normalized_b
 }
 
+/// Helper function to convert datetime with timezone to UTC
+fn convert_to_utc(dt: &str) -> String {
+    // Handle different timezone formats: Z, +HH:MM, -HH:MM
+    if dt.ends_with('Z') {
+        // Already UTC, just remove the Z
+        return dt[..dt.len() - 1].to_string();
+    }
+
+    // Find timezone offset
+    let (base_dt, offset_str) = if let Some(plus_pos) = dt.find('+') {
+        (&dt[..plus_pos], &dt[plus_pos + 1..])
+    } else if let Some(minus_pos) = dt.rfind('-') {
+        // Make sure this is a timezone offset, not a date separator
+        if minus_pos > 10 && dt.len() > minus_pos + 3 {
+            (&dt[..minus_pos], &dt[minus_pos + 1..])
+        } else {
+            // No timezone, return as-is
+            return dt.to_string();
+        }
+    } else {
+        // No timezone, return as-is
+        return dt.to_string();
+    };
+
+    // Parse timezone offset (format: HH:MM or HHMM)
+    let offset_minutes = if let Some(colon_pos) = offset_str.find(':') {
+        // Format: HH:MM
+        let hours: i32 = offset_str[..colon_pos].parse().unwrap_or(0);
+        let minutes: i32 = offset_str[colon_pos + 1..].parse().unwrap_or(0);
+        hours * 60 + minutes
+    } else if offset_str.len() == 4 {
+        // Format: HHMM
+        let hours: i32 = offset_str[..2].parse().unwrap_or(0);
+        let minutes: i32 = offset_str[2..].parse().unwrap_or(0);
+        hours * 60 + minutes
+    } else {
+        0
+    };
+
+    // Determine if this was a positive or negative offset
+    let is_negative = dt.contains(&format!("-{}", offset_str));
+    let total_offset_minutes = if is_negative { -offset_minutes } else { offset_minutes };
+
+    // Parse the base datetime to adjust it
+    if let Some(t_pos) = base_dt.find('T') {
+        let date_part = &base_dt[..t_pos];
+        let time_part = &base_dt[t_pos + 1..];
+
+        // Parse time components
+        let time_components: Vec<&str> = time_part.split(':').collect();
+        if time_components.len() >= 2 {
+            let hours: i32 = time_components[0].parse().unwrap_or(0);
+            let minutes: i32 = time_components[1].parse().unwrap_or(0);
+            let seconds_part = if time_components.len() > 2 {
+                time_components[2]
+            } else {
+                "00"
+            };
+
+            // Convert to total minutes and adjust for timezone
+            let total_minutes = hours * 60 + minutes - total_offset_minutes;
+
+            // Handle day overflow/underflow
+            let (adjusted_hours, adjusted_minutes, day_offset) = if total_minutes < 0 {
+                let abs_minutes = (-total_minutes) as u32;
+                let days = abs_minutes / (24 * 60);
+                let remaining_minutes = abs_minutes % (24 * 60);
+                let new_total_minutes = 24 * 60 - remaining_minutes;
+                (
+                    (new_total_minutes / 60) as i32,
+                    (new_total_minutes % 60) as i32,
+                    -(days as i32) - 1,
+                )
+            } else if total_minutes >= 24 * 60 {
+                let days = total_minutes / (24 * 60);
+                let remaining_minutes = total_minutes % (24 * 60);
+                (remaining_minutes / 60, remaining_minutes % 60, days)
+            } else {
+                (total_minutes / 60, total_minutes % 60, 0)
+            };
+
+            // For simplicity, if there's a day offset, we'll just use the original time
+            // A full implementation would need proper date arithmetic
+            if day_offset == 0 {
+                return format!("{}T{:02}:{:02}:{}", date_part, adjusted_hours, adjusted_minutes, seconds_part);
+            }
+        }
+    }
+
+    // Fallback: return the base datetime without timezone
+    base_dt.to_string()
+}
+
 /// Helper function to normalize datetime strings for comparison
 fn normalize_datetime(dt: &str) -> String {
     let mut normalized = dt.to_string();
@@ -4362,21 +5313,9 @@ fn normalize_datetime(dt: &str) -> String {
         }
     }
 
-    // Normalize timezone to UTC (Z)
-    // This is a simplified approach - a full implementation would convert between timezones
+    // Convert timezone to UTC for proper comparison
     if normalized.contains('+') || normalized.contains('-') || normalized.ends_with('Z') {
-        // For now, just remove timezone info for comparison
-        // A more accurate implementation would convert to a common timezone
-        if let Some(tz_pos) = normalized.find('+') {
-            normalized = normalized[..tz_pos].to_string();
-        } else if let Some(tz_pos) = normalized.rfind('-') {
-            if tz_pos > 10 {
-                // Only remove timezone, not date separators
-                normalized = normalized[..tz_pos].to_string();
-            }
-        } else if normalized.ends_with('Z') {
-            normalized = normalized[..normalized.len() - 1].to_string();
-        }
+        normalized = convert_to_utc(&normalized);
     }
 
     normalized
@@ -4431,6 +5370,7 @@ fn should_cache_node(node: &AstNode) -> bool {
         | AstNode::NumberLiteral(_)
         | AstNode::BooleanLiteral(_)
         | AstNode::DateTimeLiteral(_)
+        | AstNode::QuantityLiteral { .. }
         | AstNode::Variable(_) => false,
 
         // Cache complex path expressions that might be expensive
@@ -4447,9 +5387,12 @@ fn should_cache_node(node: &AstNode) -> bool {
                 | BinaryOperator::Subtraction
                 | BinaryOperator::Multiplication
                 | BinaryOperator::Division
+                | BinaryOperator::Div
                 | BinaryOperator::Mod
                 | BinaryOperator::Equals
                 | BinaryOperator::NotEquals
+                | BinaryOperator::Equivalent
+                | BinaryOperator::NotEquivalent
                 | BinaryOperator::LessThan
                 | BinaryOperator::LessOrEqual
                 | BinaryOperator::GreaterThan
@@ -4463,6 +5406,9 @@ fn should_cache_node(node: &AstNode) -> bool {
                 | BinaryOperator::Xor
                 | BinaryOperator::Implies
                 | BinaryOperator::In
+                | BinaryOperator::Contains
+                | BinaryOperator::Is
+                | BinaryOperator::As
                 | BinaryOperator::Union
                 | BinaryOperator::Concatenation => true,
             }
@@ -4485,6 +5431,7 @@ fn is_simple_node(node: &AstNode) -> bool {
             | AstNode::NumberLiteral(_)
             | AstNode::BooleanLiteral(_)
             | AstNode::DateTimeLiteral(_)
+            | AstNode::QuantityLiteral { .. }
     )
 }
 
@@ -4544,6 +5491,919 @@ fn hash_ast_node(node: &AstNode, hasher: &mut DefaultHasher) {
             hash_ast_node(collection, hasher);
             hash_ast_node(index, hasher);
         }
+        AstNode::QuantityLiteral { value, unit } => {
+            10u8.hash(hasher);
+            value.to_bits().hash(hasher);
+            unit.hash(hasher);
+        }
+    }
+}
+
+/// Evaluates the iif() function (if-then-else)
+fn evaluate_iif_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 3 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'iif' function expects 3 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Evaluate the condition
+    let condition = evaluate_ast_internal(&arguments[0], context, visitor)?;
+
+    // Check if condition is truthy
+    let is_true = match condition {
+        FhirPathValue::Boolean(b) => b,
+        FhirPathValue::Collection(ref items) => !items.is_empty(),
+        FhirPathValue::Empty => false,
+        _ => true, // Non-empty, non-boolean values are considered truthy
+    };
+
+    // Return the appropriate branch
+    if is_true {
+        evaluate_ast_internal(&arguments[1], context, visitor)
+    } else {
+        evaluate_ast_internal(&arguments[2], context, visitor)
+    }
+}
+
+/// Evaluates the single() function - returns the single item in a collection or error if not exactly one
+fn evaluate_single_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+) -> Result<FhirPathValue, FhirPathError> {
+    if !arguments.is_empty() {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'single' function expects 0 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection from context
+    let collection = get_current_collection(context)?;
+
+    match collection.len() {
+        0 => Ok(FhirPathValue::Empty),
+        1 => Ok(collection[0].clone()),
+        _ => Err(FhirPathError::EvaluationError(
+            "single() function called on collection with more than one item".to_string(),
+        )),
+    }
+}
+
+/// Evaluates the supersetOf() function
+fn evaluate_superset_of_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 1 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'supersetOf' function expects 1 argument, got {}",
+            arguments.len()
+        )));
+    }
+
+    let current_collection = get_current_collection(context)?;
+    let other_value = evaluate_ast_internal(&arguments[0], context, visitor)?;
+
+    let other_collection = match other_value {
+        FhirPathValue::Collection(items) => items,
+        FhirPathValue::Empty => vec![],
+        single_item => vec![single_item],
+    };
+
+    // Check if current collection is a superset of other collection
+    // (all items in other collection are in current collection)
+    for other_item in &other_collection {
+        if !current_collection.iter().any(|current_item| values_equal(current_item, other_item)) {
+            return Ok(FhirPathValue::Boolean(false));
+        }
+    }
+
+    Ok(FhirPathValue::Boolean(true))
+}
+
+/// Evaluates the trace() function - for debugging, returns the input unchanged
+fn evaluate_trace_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.is_empty() || arguments.len() > 2 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'trace' function expects 1 or 2 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // Get the current collection
+    let collection = get_current_collection(context)?;
+
+    // For trace, we just return the current collection unchanged
+    // In a real implementation, this would log the trace message
+    if collection.is_empty() {
+        Ok(FhirPathValue::Empty)
+    } else if collection.len() == 1 {
+        Ok(collection[0].clone())
+    } else {
+        Ok(FhirPathValue::Collection(collection))
+    }
+}
+
+/// Evaluates the aggregate() function - simplified implementation
+fn evaluate_aggregate_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() < 1 || arguments.len() > 2 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'aggregate' function expects 1 or 2 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    // For now, return a simple implementation that just returns the initial value
+    // A full implementation would need to handle the aggregation expression properly
+    if arguments.len() == 2 {
+        evaluate_ast_internal(&arguments[1], context, visitor)
+    } else {
+        Ok(FhirPathValue::Empty)
+    }
+}
+
+/// Evaluates the toChars() function - converts string to collection of single-character strings
+fn evaluate_to_chars_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.toChars()
+        // Use this_item as the value to convert
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'toChars' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'toChars' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: toChars(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'toChars' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => {
+            let chars: Vec<FhirPathValue> = s.chars()
+                .map(|c| FhirPathValue::String(c.to_string()))
+                .collect();
+            Ok(FhirPathValue::Collection(chars))
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                if let FhirPathValue::String(s) = &items[0] {
+                    let chars: Vec<FhirPathValue> = s.chars()
+                        .map(|c| FhirPathValue::String(c.to_string()))
+                        .collect();
+                    Ok(FhirPathValue::Collection(chars))
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
+            } else {
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty),
+    }
+}
+
+/// Evaluates the escape() function - escapes strings for HTML/JSON
+fn evaluate_escape_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 2 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'escape' function expects 2 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    let value = evaluate_ast_internal(&arguments[0], context, visitor)?;
+    let format = evaluate_ast_internal(&arguments[1], context, visitor)?;
+
+    match (value, format) {
+        (FhirPathValue::String(s), FhirPathValue::String(fmt)) => {
+            let escaped = match fmt.as_str() {
+                "html" => s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;"),
+                "json" => s.replace("\\", "\\\\").replace("\"", "\\\""),
+                _ => s, // Unknown format, return as-is
+            };
+            Ok(FhirPathValue::String(escaped))
+        }
+        _ => Ok(FhirPathValue::Empty),
+    }
+}
+
+/// Evaluates the unescape() function - unescapes HTML/JSON strings
+fn evaluate_unescape_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    if arguments.len() != 2 {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'unescape' function expects 2 arguments, got {}",
+            arguments.len()
+        )));
+    }
+
+    let value = evaluate_ast_internal(&arguments[0], context, visitor)?;
+    let format = evaluate_ast_internal(&arguments[1], context, visitor)?;
+
+    match (value, format) {
+        (FhirPathValue::String(s), FhirPathValue::String(fmt)) => {
+            let unescaped = match fmt.as_str() {
+                "html" => s.replace("&quot;", "\"").replace("&gt;", ">").replace("&lt;", "<").replace("&amp;", "&"),
+                "json" => s.replace("\\\"", "\"").replace("\\\\", "\\"),
+                _ => s, // Unknown format, return as-is
+            };
+            Ok(FhirPathValue::String(unescaped))
+        }
+        _ => Ok(FhirPathValue::Empty),
+    }
+}
+
+/// Evaluates the toString() function
+fn evaluate_to_string_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.toString()
+        // Use this_item as the value to convert
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'toString' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'toString' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: toString(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'toString' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => Ok(FhirPathValue::String(s)),
+        FhirPathValue::Integer(i) => Ok(FhirPathValue::String(i.to_string())),
+        FhirPathValue::Decimal(d) => Ok(FhirPathValue::String(d.to_string())),
+        FhirPathValue::Boolean(b) => Ok(FhirPathValue::String(b.to_string())),
+        FhirPathValue::Date(d) => Ok(FhirPathValue::String(d)),
+        FhirPathValue::DateTime(dt) => Ok(FhirPathValue::String(dt)),
+        FhirPathValue::Time(t) => Ok(FhirPathValue::String(t)),
+        FhirPathValue::Quantity { value, unit } => {
+            Ok(FhirPathValue::String(format!("{} {}", value, unit)))
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item directly
+                let item = &items[0];
+                match item {
+                    FhirPathValue::String(s) => Ok(FhirPathValue::String(s.clone())),
+                    FhirPathValue::Integer(i) => Ok(FhirPathValue::String(i.to_string())),
+                    FhirPathValue::Decimal(d) => Ok(FhirPathValue::String(d.to_string())),
+                    FhirPathValue::Boolean(b) => Ok(FhirPathValue::String(b.to_string())),
+                    FhirPathValue::Date(d) => Ok(FhirPathValue::String(d.clone())),
+                    FhirPathValue::DateTime(dt) => Ok(FhirPathValue::String(dt.clone())),
+                    FhirPathValue::Time(t) => Ok(FhirPathValue::String(t.clone())),
+                    FhirPathValue::Quantity { value, unit } => {
+                        Ok(FhirPathValue::String(format!("{} {}", value, unit)))
+                    }
+                    _ => Ok(FhirPathValue::Empty),
+                }
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        FhirPathValue::Empty => Ok(FhirPathValue::Empty),
+        FhirPathValue::Resource(_) => Ok(FhirPathValue::Empty), // Resources can't be converted to string
+    }
+}
+
+/// Evaluates the toInteger() function
+fn evaluate_to_integer_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.toInteger()
+        // Use this_item as the value to convert
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'toInteger' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'toInteger' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: toInteger(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'toInteger' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::Integer(i) => Ok(FhirPathValue::Integer(i)),
+        FhirPathValue::String(s) => {
+            // Try to parse string as integer
+            if let Ok(i) = s.parse::<i64>() {
+                Ok(FhirPathValue::Integer(i))
+            } else {
+                // If parsing fails, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        FhirPathValue::Boolean(b) => {
+            // true -> 1, false -> 0
+            Ok(FhirPathValue::Integer(if b { 1 } else { 0 }))
+        }
+        FhirPathValue::Decimal(d) => {
+            // Only convert if it's a whole number
+            if d.fract() == 0.0 {
+                Ok(FhirPathValue::Integer(d as i64))
+            } else {
+                // If it has fractional part, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                evaluate_to_integer_function(&[arguments[0].clone()], context, visitor)
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be converted to integer
+    }
+}
+
+/// Evaluates the toDecimal() function
+fn evaluate_to_decimal_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.toDecimal()
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'toDecimal' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'toDecimal' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: toDecimal(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'toDecimal' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::Decimal(d) => Ok(FhirPathValue::Decimal(d)),
+        FhirPathValue::Integer(i) => Ok(FhirPathValue::Decimal(i as f64)),
+        FhirPathValue::String(s) => {
+            // Try to parse string as decimal
+            if let Ok(d) = s.parse::<f64>() {
+                Ok(FhirPathValue::Decimal(d))
+            } else {
+                // If parsing fails, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        FhirPathValue::Boolean(b) => {
+            // true -> 1.0, false -> 0.0
+            Ok(FhirPathValue::Decimal(if b { 1.0 } else { 0.0 }))
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                let single_item_context = context.create_iteration_context(items[0].clone(), 0, 1)?;
+                evaluate_to_decimal_function(&[], &single_item_context, visitor)
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be converted to decimal
+    }
+}
+
+/// Evaluates the toQuantity() function
+fn evaluate_to_quantity_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.toQuantity()
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'toQuantity' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'toQuantity' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: toQuantity(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'toQuantity' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::Integer(i) => {
+            // Convert integer to quantity with default unit
+            Ok(FhirPathValue::Quantity {
+                value: i as f64,
+                unit: "1".to_string(), // Default unit for dimensionless quantities
+            })
+        }
+        FhirPathValue::Decimal(d) => {
+            // Convert decimal to quantity with default unit
+            Ok(FhirPathValue::Quantity {
+                value: d,
+                unit: "1".to_string(), // Default unit for dimensionless quantities
+            })
+        }
+        FhirPathValue::String(s) => {
+            // Try to parse string as quantity (e.g., "5.4 'mg'")
+            // For now, simple implementation - just try to parse as number
+            if let Ok(d) = s.parse::<f64>() {
+                Ok(FhirPathValue::Quantity {
+                    value: d,
+                    unit: "1".to_string(),
+                })
+            } else {
+                // If parsing fails, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        FhirPathValue::Quantity { value, unit } => {
+            // Already a quantity, return as-is
+            Ok(FhirPathValue::Quantity { value, unit })
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                let single_item_context = context.create_iteration_context(items[0].clone(), 0, 1)?;
+                evaluate_to_quantity_function(&[], &single_item_context, visitor)
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be converted to quantity
+    }
+}
+
+/// Evaluates the toBoolean() function
+fn evaluate_to_boolean_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.toBoolean()
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'toBoolean' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'toBoolean' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: toBoolean(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'toBoolean' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::Boolean(b) => Ok(FhirPathValue::Boolean(b)),
+        FhirPathValue::Integer(i) => {
+            // 1 -> true, 0 -> false, others -> empty
+            match i {
+                1 => Ok(FhirPathValue::Boolean(true)),
+                0 => Ok(FhirPathValue::Boolean(false)),
+                _ => Ok(FhirPathValue::Empty),
+            }
+        }
+        FhirPathValue::String(s) => {
+            // "true"/"false" (case insensitive) -> true/false, others -> empty
+            match s.to_lowercase().as_str() {
+                "true" => Ok(FhirPathValue::Boolean(true)),
+                "false" => Ok(FhirPathValue::Boolean(false)),
+                _ => Ok(FhirPathValue::Empty),
+            }
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                let single_item_context = context.create_iteration_context(items[0].clone(), 0, 1)?;
+                evaluate_to_boolean_function(&[], &single_item_context, visitor)
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be converted to boolean
+    }
+}
+
+/// Evaluates the upper() function - converts string to uppercase
+fn evaluate_upper_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.upper()
+        // Use this_item as the value to convert
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'upper' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'upper' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: upper(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'upper' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => Ok(FhirPathValue::String(s.to_uppercase())),
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                if let FhirPathValue::String(s) = &items[0] {
+                    Ok(FhirPathValue::String(s.to_uppercase()))
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be converted to uppercase
+    }
+}
+
+/// Evaluates the lower() function - converts string to lowercase
+fn evaluate_lower_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.lower()
+        // Use this_item as the value to convert
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'lower' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'lower' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: lower(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'lower' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => Ok(FhirPathValue::String(s.to_lowercase())),
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                if let FhirPathValue::String(s) = &items[0] {
+                    Ok(FhirPathValue::String(s.to_lowercase()))
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be converted to lowercase
+    }
+}
+
+/// Evaluates the trim() function - removes leading and trailing whitespace from string
+fn evaluate_trim_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.trim()
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'trim' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'trim' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: trim(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'trim' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => Ok(FhirPathValue::String(s.trim().to_string())),
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                if let FhirPathValue::String(s) = &items[0] {
+                    Ok(FhirPathValue::String(s.trim().to_string()))
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be trimmed
+    }
+}
+
+/// Evaluates the encode() function - URL encodes a string
+fn evaluate_encode_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.encode()
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'encode' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'encode' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: encode(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'encode' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => {
+            // Simple URL encoding - replace spaces with %20 and other common characters
+            let encoded = s
+                .replace(' ', "%20")
+                .replace('&', "%26")
+                .replace('=', "%3D")
+                .replace('?', "%3F")
+                .replace('#', "%23");
+            Ok(FhirPathValue::String(encoded))
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                if let FhirPathValue::String(s) = &items[0] {
+                    let encoded = s
+                        .replace(' ', "%20")
+                        .replace('&', "%26")
+                        .replace('=', "%3D")
+                        .replace('?', "%3F")
+                        .replace('#', "%23");
+                    Ok(FhirPathValue::String(encoded))
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be encoded
+    }
+}
+
+/// Evaluates the decode() function - URL decodes a string
+fn evaluate_decode_function(
+    arguments: &[AstNode],
+    context: &EvaluationContext,
+    visitor: &dyn AstVisitor,
+) -> Result<FhirPathValue, FhirPathError> {
+    let value = if arguments.is_empty() {
+        // Method call syntax: value.decode()
+        if let Some(this_item) = &context.this_item {
+            match this_item {
+                FhirPathValue::Collection(items) if items.len() == 1 => items[0].clone(),
+                FhirPathValue::Collection(_) => {
+                    return Err(FhirPathError::EvaluationError(
+                        "'decode' function cannot be applied to collections with multiple items"
+                            .to_string(),
+                    ));
+                }
+                other => other.clone(),
+            }
+        } else {
+            return Err(FhirPathError::EvaluationError(
+                "'decode' function expects 1 argument or method call syntax".to_string(),
+            ));
+        }
+    } else if arguments.len() == 1 {
+        // Function call syntax: decode(value)
+        evaluate_ast_internal(&arguments[0], context, visitor)?
+    } else {
+        return Err(FhirPathError::EvaluationError(format!(
+            "'decode' function expects 0 or 1 argument, got {}",
+            arguments.len()
+        )));
+    };
+
+    match value {
+        FhirPathValue::String(s) => {
+            // Simple URL decoding - replace common encoded characters
+            let decoded = s
+                .replace("%20", " ")
+                .replace("%26", "&")
+                .replace("%3D", "=")
+                .replace("%3F", "?")
+                .replace("%23", "#");
+            Ok(FhirPathValue::String(decoded))
+        }
+        FhirPathValue::Collection(items) => {
+            if items.len() == 1 {
+                // For single-item collections, convert the item
+                if let FhirPathValue::String(s) = &items[0] {
+                    let decoded = s
+                        .replace("%20", " ")
+                        .replace("%26", "&")
+                        .replace("%3D", "=")
+                        .replace("%3F", "?")
+                        .replace("%23", "#");
+                    Ok(FhirPathValue::String(decoded))
+                } else {
+                    Ok(FhirPathValue::Empty)
+                }
+            } else {
+                // For multi-item collections, return empty
+                Ok(FhirPathValue::Empty)
+            }
+        }
+        _ => Ok(FhirPathValue::Empty), // Other types can't be decoded
     }
 }
 
@@ -4574,6 +6434,68 @@ fn values_equal(left: &FhirPathValue, right: &FhirPathValue) -> bool {
                 unit: u2,
             },
         ) => (v1 - v2).abs() < f64::EPSILON && u1 == u2,
+        _ => false,
+    }
+}
+
+/// Helper function to check if two values are equivalent (FHIRPath ~ operator)
+/// Equivalent is more relaxed than equality, allowing type coercion and approximate matching
+fn values_equivalent(left: &FhirPathValue, right: &FhirPathValue) -> bool {
+    match (left, right) {
+        // Same as equality for these types
+        (FhirPathValue::Empty, FhirPathValue::Empty) => true,
+        (FhirPathValue::Boolean(a), FhirPathValue::Boolean(b)) => a == b,
+
+        // Numeric equivalence with type coercion
+        (FhirPathValue::Integer(a), FhirPathValue::Integer(b)) => a == b,
+        (FhirPathValue::Decimal(a), FhirPathValue::Decimal(b)) => (a - b).abs() < f64::EPSILON,
+        (FhirPathValue::Integer(a), FhirPathValue::Decimal(b)) => {
+            (*a as f64 - b).abs() < f64::EPSILON
+        }
+        (FhirPathValue::Decimal(a), FhirPathValue::Integer(b)) => {
+            (a - *b as f64).abs() < f64::EPSILON
+        }
+
+        // String equivalence (case-insensitive for equivalent)
+        (FhirPathValue::String(a), FhirPathValue::String(b)) => {
+            a.to_lowercase() == b.to_lowercase()
+        }
+
+        // DateTime equivalence with normalization
+        (FhirPathValue::Date(a), FhirPathValue::Date(b)) => datetime_equal(a, b),
+        (FhirPathValue::DateTime(a), FhirPathValue::DateTime(b)) => datetime_equal(a, b),
+        (FhirPathValue::Time(a), FhirPathValue::Time(b)) => a == b,
+
+        // Cross-type datetime equivalence
+        (FhirPathValue::Date(a), FhirPathValue::DateTime(b)) => datetime_equal(a, b),
+        (FhirPathValue::DateTime(a), FhirPathValue::Date(b)) => datetime_equal(a, b),
+
+        // Quantity equivalence
+        (
+            FhirPathValue::Quantity {
+                value: v1,
+                unit: u1,
+            },
+            FhirPathValue::Quantity {
+                value: v2,
+                unit: u2,
+            },
+        ) => (v1 - v2).abs() < f64::EPSILON && u1 == u2,
+
+        // Type coercion for numbers and strings
+        (FhirPathValue::Integer(a), FhirPathValue::String(b)) => {
+            b.parse::<i64>().map_or(false, |parsed| *a == parsed)
+        }
+        (FhirPathValue::String(a), FhirPathValue::Integer(b)) => {
+            a.parse::<i64>().map_or(false, |parsed| parsed == *b)
+        }
+        (FhirPathValue::Decimal(a), FhirPathValue::String(b)) => {
+            b.parse::<f64>().map_or(false, |parsed| (a - parsed).abs() < f64::EPSILON)
+        }
+        (FhirPathValue::String(a), FhirPathValue::Decimal(b)) => {
+            a.parse::<f64>().map_or(false, |parsed| (parsed - b).abs() < f64::EPSILON)
+        }
+
         _ => false,
     }
 }

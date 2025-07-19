@@ -3,7 +3,8 @@
 // Command-line interface for evaluating FHIRPath expressions against FHIR resources.
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use colored::Colorize;
 use fhirpath_core::evaluator::{evaluate_expression_optimized, evaluate_expression_streaming};
 use fhirpath_core::lexer::tokenize;
@@ -54,6 +55,13 @@ enum Commands {
         /// Output format (tree, debug)
         #[arg(short, long, default_value = "tree")]
         format: String,
+    },
+
+    /// Generate shell completion scripts
+    Completion {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 
@@ -180,6 +188,11 @@ fn main() -> Result<()> {
                 }
             }
 
+            Ok(())
+        }
+        Commands::Completion { shell } => {
+            let mut cmd = Cli::command();
+            generate(*shell, &mut cmd, "aether-fhirpath", &mut std::io::stdout());
             Ok(())
         }
     }
@@ -399,6 +412,10 @@ fn format_ast_as_tree(node: &AstNode, indent: usize) -> String {
             result.push_str(&format!("{}└─ Index:\n", indent_str));
             result.push_str(&format_ast_as_tree(index, indent + 2));
         }
+        AstNode::QuantityLiteral { value, unit } => {
+            let unit_str = unit.as_ref().map(|u| format!(" '{}'", u)).unwrap_or_default();
+            result.push_str(&format!("{}QuantityLiteral: {}{}\n", indent_str, value, unit_str));
+        }
     }
 
     result
@@ -409,6 +426,8 @@ fn format_binary_operator(op: &BinaryOperator) -> &'static str {
     match op {
         BinaryOperator::Equals => "=",
         BinaryOperator::NotEquals => "!=",
+        BinaryOperator::Equivalent => "~",
+        BinaryOperator::NotEquivalent => "!~",
         BinaryOperator::LessThan => "<",
         BinaryOperator::LessOrEqual => "<=",
         BinaryOperator::GreaterThan => ">",
@@ -417,12 +436,16 @@ fn format_binary_operator(op: &BinaryOperator) -> &'static str {
         BinaryOperator::Subtraction => "-",
         BinaryOperator::Multiplication => "*",
         BinaryOperator::Division => "/",
+        BinaryOperator::Div => "div",
         BinaryOperator::Mod => "mod",
         BinaryOperator::And => "and",
         BinaryOperator::Or => "or",
         BinaryOperator::Xor => "xor",
         BinaryOperator::Implies => "implies",
         BinaryOperator::In => "in",
+        BinaryOperator::Contains => "contains",
+        BinaryOperator::Is => "is",
+        BinaryOperator::As => "as",
         BinaryOperator::Union => "|",
         BinaryOperator::Concatenation => "&",
     }
@@ -431,6 +454,7 @@ fn format_binary_operator(op: &BinaryOperator) -> &'static str {
 /// Format unary operator as string
 fn format_unary_operator(op: &UnaryOperator) -> &'static str {
     match op {
+        UnaryOperator::Positive => "+",
         UnaryOperator::Negate => "-",
         UnaryOperator::Not => "not",
     }

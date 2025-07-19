@@ -14,6 +14,10 @@ pub enum AstNode {
     NumberLiteral(f64),
     BooleanLiteral(bool),
     DateTimeLiteral(String),
+    QuantityLiteral {
+        value: f64,
+        unit: Option<String>,
+    },
     Variable(String),
 
     // Path navigation
@@ -49,6 +53,8 @@ pub enum AstNode {
 pub enum BinaryOperator {
     Equals,
     NotEquals,
+    Equivalent,
+    NotEquivalent,
     LessThan,
     LessOrEqual,
     GreaterThan,
@@ -57,12 +63,16 @@ pub enum BinaryOperator {
     Subtraction,
     Multiplication,
     Division,
+    Div,
     Mod,
     And,
     Or,
     Xor,
     Implies,
     In,
+    Contains,
+    Is,
+    As,
     Union,
     Concatenation,
 }
@@ -70,6 +80,7 @@ pub enum BinaryOperator {
 /// Unary operators in FHIRPath
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOperator {
+    Positive,
     Negate,
     Not,
 }
@@ -158,23 +169,7 @@ impl<'a> Parser<'a> {
 
     /// Parses an expression
     fn expression(&mut self) -> Result<AstNode, FhirPathError> {
-        self.union()
-    }
-
-    /// Parses a union expression
-    fn union(&mut self) -> Result<AstNode, FhirPathError> {
-        let mut expr = self.logical_implies()?;
-
-        while self.match_token(TokenType::Pipe) {
-            let right = self.logical_implies()?;
-            expr = AstNode::BinaryOp {
-                op: BinaryOperator::Union,
-                left: Box::new(expr),
-                right: Box::new(right),
-            };
-        }
-
-        Ok(expr)
+        self.logical_implies()
     }
 
     /// Parses a logical IMPLIES expression
@@ -214,14 +209,14 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    /// Parses a concatenation expression
+    /// Parses a logical AND expression
     fn logical_and(&mut self) -> Result<AstNode, FhirPathError> {
-        let mut expr = self.equality()?;
+        let mut expr = self.membership()?;
 
         while self.match_token(TokenType::And) {
-            let right = self.equality()?;
+            let right = self.membership()?;
             expr = AstNode::BinaryOp {
-                op: BinaryOperator::Concatenation,
+                op: BinaryOperator::And,
                 left: Box::new(expr),
                 right: Box::new(right),
             };
@@ -230,17 +225,17 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    /// Parses an equality expression
-    fn equality(&mut self) -> Result<AstNode, FhirPathError> {
-        let mut expr = self.comparison()?;
+    /// Parses a membership expression (in, contains)
+    fn membership(&mut self) -> Result<AstNode, FhirPathError> {
+        let mut expr = self.equality()?;
 
-        while self.match_any(&[TokenType::Equal, TokenType::NotEqual]) {
+        while self.match_any(&[TokenType::In, TokenType::Contains]) {
             let operator = match self.previous().token_type {
-                TokenType::Equal => BinaryOperator::Equals,
-                TokenType::NotEqual => BinaryOperator::NotEquals,
+                TokenType::In => BinaryOperator::In,
+                TokenType::Contains => BinaryOperator::Contains,
                 _ => unreachable!(),
             };
-            let right = self.comparison()?;
+            let right = self.equality()?;
             expr = AstNode::BinaryOp {
                 op: operator,
                 left: Box::new(expr),
@@ -251,9 +246,32 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    /// Parses a comparison expression
-    fn comparison(&mut self) -> Result<AstNode, FhirPathError> {
-        let mut expr = self.term()?;
+    /// Parses an equality expression
+    fn equality(&mut self) -> Result<AstNode, FhirPathError> {
+        let mut expr = self.inequality()?;
+
+        while self.match_any(&[TokenType::Equal, TokenType::NotEqual, TokenType::Equivalent, TokenType::NotEquivalent]) {
+            let operator = match self.previous().token_type {
+                TokenType::Equal => BinaryOperator::Equals,
+                TokenType::NotEqual => BinaryOperator::NotEquals,
+                TokenType::Equivalent => BinaryOperator::Equivalent,
+                TokenType::NotEquivalent => BinaryOperator::NotEquivalent,
+                _ => unreachable!(),
+            };
+            let right = self.inequality()?;
+            expr = AstNode::BinaryOp {
+                op: operator,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    /// Parses an inequality expression
+    fn inequality(&mut self) -> Result<AstNode, FhirPathError> {
+        let mut expr = self.union()?;
 
         while self.match_any(&[
             TokenType::LessThan,
@@ -268,7 +286,7 @@ impl<'a> Parser<'a> {
                 TokenType::GreaterOrEqual => BinaryOperator::GreaterOrEqual,
                 _ => unreachable!(),
             };
-            let right = self.term()?;
+            let right = self.union()?;
             expr = AstNode::BinaryOp {
                 op: operator,
                 left: Box::new(expr),
@@ -279,17 +297,112 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    /// Parses a term expression (addition, subtraction)
-    fn term(&mut self) -> Result<AstNode, FhirPathError> {
-        let mut expr = self.factor()?;
+    /// Parses a union expression
+    fn union(&mut self) -> Result<AstNode, FhirPathError> {
+        let mut expr = self.type_expression()?;
 
-        while self.match_any(&[TokenType::Plus, TokenType::Minus]) {
+        while self.match_token(TokenType::Pipe) {
+            let right = self.type_expression()?;
+            expr = AstNode::BinaryOp {
+                op: BinaryOperator::Union,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    /// Parses a type expression (is, as)
+    fn type_expression(&mut self) -> Result<AstNode, FhirPathError> {
+        let mut expr = self.additive()?;
+
+        while self.check(TokenType::Is) || self.check(TokenType::As) {
+            // Look ahead to see if this is a method call (followed by '(') or a binary operator
+            if self.check(TokenType::Is) && self.current + 1 < self.tokens.len() &&
+               self.tokens[self.current + 1].token_type == TokenType::LeftParen {
+                // This is a method call like .is(DateTime), not a binary operator
+                // Let path() handle it instead
+                break;
+            }
+
+            if self.check(TokenType::As) && self.current + 1 < self.tokens.len() &&
+               self.tokens[self.current + 1].token_type == TokenType::LeftParen {
+                // This is a method call like .as(Type), not a binary operator
+                // Let path() handle it instead
+                break;
+            }
+
+            // This is a binary operator, consume it
+            self.advance();
+            let operator = match self.previous().token_type {
+                TokenType::Is => BinaryOperator::Is,
+                TokenType::As => BinaryOperator::As,
+                _ => unreachable!(),
+            };
+            let right = self.qualified_identifier()?;
+            expr = AstNode::BinaryOp {
+                op: operator,
+                left: Box::new(expr),
+                right: Box::new(right),
+            };
+        }
+
+        Ok(expr)
+    }
+
+    /// Parses a qualified identifier (identifier ('.' identifier)*)
+    fn qualified_identifier(&mut self) -> Result<AstNode, FhirPathError> {
+        if !self.check(TokenType::Identifier) && !self.check(TokenType::DelimitedIdentifier)
+            && !self.match_any(&[TokenType::Is, TokenType::As, TokenType::Contains, TokenType::In]) {
+            return Err(FhirPathError::ParserError(
+                "Expected identifier for qualified identifier".to_string(),
+            ));
+        }
+
+        let mut qualified_name = String::new();
+
+        // Handle first identifier (can be regular identifier, delimited identifier, or keyword)
+        if self.match_token(TokenType::Identifier) {
+            qualified_name.push_str(&self.previous().lexeme);
+        } else if self.match_token(TokenType::DelimitedIdentifier) {
+            qualified_name.push_str(&self.previous().lexeme);
+        } else if self.match_any(&[TokenType::Is, TokenType::As, TokenType::Contains, TokenType::In]) {
+            qualified_name.push_str(&self.previous().lexeme);
+        }
+
+        // Handle additional dot-separated identifiers
+        while self.match_token(TokenType::Dot) {
+            qualified_name.push('.');
+
+            if self.match_token(TokenType::Identifier) {
+                qualified_name.push_str(&self.previous().lexeme);
+            } else if self.match_token(TokenType::DelimitedIdentifier) {
+                qualified_name.push_str(&self.previous().lexeme);
+            } else if self.match_any(&[TokenType::Is, TokenType::As, TokenType::Contains, TokenType::In]) {
+                qualified_name.push_str(&self.previous().lexeme);
+            } else {
+                return Err(FhirPathError::ParserError(
+                    "Expected identifier after '.' in qualified identifier".to_string(),
+                ));
+            }
+        }
+
+        Ok(AstNode::Identifier(qualified_name))
+    }
+
+    /// Parses an additive expression (addition, subtraction, concatenation)
+    fn additive(&mut self) -> Result<AstNode, FhirPathError> {
+        let mut expr = self.multiplicative()?;
+
+        while self.match_any(&[TokenType::Plus, TokenType::Minus, TokenType::Ampersand]) {
             let operator = match self.previous().token_type {
                 TokenType::Plus => BinaryOperator::Addition,
                 TokenType::Minus => BinaryOperator::Subtraction,
+                TokenType::Ampersand => BinaryOperator::Concatenation,
                 _ => unreachable!(),
             };
-            let right = self.factor()?;
+            let right = self.multiplicative()?;
             expr = AstNode::BinaryOp {
                 op: operator,
                 left: Box::new(expr),
@@ -300,14 +413,15 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    /// Parses a factor expression (multiplication, division)
-    fn factor(&mut self) -> Result<AstNode, FhirPathError> {
+    /// Parses a multiplicative expression (multiplication, division, div, mod)
+    fn multiplicative(&mut self) -> Result<AstNode, FhirPathError> {
         let mut expr = self.unary()?;
 
-        while self.match_any(&[TokenType::Multiply, TokenType::Divide, TokenType::Mod]) {
+        while self.match_any(&[TokenType::Multiply, TokenType::Divide, TokenType::Div, TokenType::Mod]) {
             let operator = match self.previous().token_type {
                 TokenType::Multiply => BinaryOperator::Multiplication,
                 TokenType::Divide => BinaryOperator::Division,
+                TokenType::Div => BinaryOperator::Div,
                 TokenType::Mod => BinaryOperator::Mod,
                 _ => unreachable!(),
             };
@@ -322,9 +436,16 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
+
     /// Parses a unary expression
     fn unary(&mut self) -> Result<AstNode, FhirPathError> {
-        if self.match_token(TokenType::Minus) {
+        if self.match_token(TokenType::Plus) {
+            let right = self.unary()?;
+            Ok(AstNode::UnaryOp {
+                op: UnaryOperator::Positive,
+                operand: Box::new(right),
+            })
+        } else if self.match_token(TokenType::Minus) {
             let right = self.unary()?;
             Ok(AstNode::UnaryOp {
                 op: UnaryOperator::Negate,
@@ -395,6 +516,37 @@ impl<'a> Parser<'a> {
             } else {
                 Ok(AstNode::Identifier(name))
             }
+        } else if self.match_any(&[TokenType::Is, TokenType::As, TokenType::Contains, TokenType::In]) {
+            // Handle 'is', 'as', 'contains', 'in' as function names when they appear in function call contexts
+            let name = self.previous().lexeme.clone();
+
+            // Check if this is a function call
+            if self.match_token(TokenType::LeftParen) {
+                let mut arguments = Vec::new();
+
+                // Parse arguments
+                if !self.check(TokenType::RightParen) {
+                    loop {
+                        arguments.push(self.expression()?);
+                        if !self.match_token(TokenType::Comma) {
+                            break;
+                        }
+                    }
+                }
+
+                self.consume(
+                    TokenType::RightParen,
+                    "Expected ')' after function arguments",
+                )?;
+
+                Ok(AstNode::FunctionCall { name, arguments })
+            } else {
+                Ok(AstNode::Identifier(name))
+            }
+        } else if self.match_token(TokenType::DelimitedIdentifier) {
+            // Handle delimited identifiers like `identifier`
+            let name = self.previous().lexeme.clone();
+            Ok(AstNode::Identifier(name))
         } else if self.match_token(TokenType::StringLiteral) {
             Ok(AstNode::StringLiteral(self.previous().lexeme.clone()))
         } else if self.match_token(TokenType::NumberLiteral) {
@@ -403,12 +555,19 @@ impl<'a> Parser<'a> {
                 .parse::<f64>()
                 .map_err(|e| FhirPathError::ParserError(format!("Invalid number: {}", e)))?;
 
-            // Check if the original lexeme contains a decimal point to preserve type information
-            if lexeme.contains('.') {
-                // It's a decimal literal (like 1.0 or 1.5)
-                Ok(AstNode::NumberLiteral(value))
+            // Check if this is followed by a unit (quantity literal)
+            if self.check(TokenType::Identifier) || self.check(TokenType::StringLiteral) {
+                let unit = if self.match_token(TokenType::Identifier) {
+                    Some(self.previous().lexeme.clone())
+                } else if self.match_token(TokenType::StringLiteral) {
+                    Some(self.previous().lexeme.clone())
+                } else {
+                    None
+                };
+
+                Ok(AstNode::QuantityLiteral { value, unit })
             } else {
-                // It's an integer literal (like 1 or 42)
+                // Regular number literal without unit
                 Ok(AstNode::NumberLiteral(value))
             }
         } else if self.match_token(TokenType::BooleanLiteral) {
@@ -422,118 +581,48 @@ impl<'a> Parser<'a> {
                 }
             };
             Ok(AstNode::BooleanLiteral(value))
+        } else if self.match_token(TokenType::DateTimeLiteral) {
+            // Handle DateTime literals generated by lexer
+            Ok(AstNode::DateTimeLiteral(self.previous().lexeme.clone()))
+        } else if self.match_token(TokenType::TimeLiteral) {
+            // Handle Time literals generated by lexer
+            Ok(AstNode::DateTimeLiteral(self.previous().lexeme.clone()))
+        } else if self.match_token(TokenType::DateLiteral) {
+            // Handle Date literals generated by lexer
+            Ok(AstNode::DateTimeLiteral(self.previous().lexeme.clone()))
+        } else if self.match_token(TokenType::LeftBrace) {
+            // Handle empty collections {}
+            self.consume(TokenType::RightBrace, "Expected '}' after empty collection")?;
+            Ok(AstNode::Identifier("{}".to_string())) // Represent empty collection as special identifier
         } else if self.match_token(TokenType::LeftParen) {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expected ')' after expression")?;
             Ok(expr)
-        } else if self.match_token(TokenType::Backtick) {
-            // Escaped identifier - expect identifier after backtick
+        } else if self.match_token(TokenType::Dollar) {
+            // Context variable or special invocation - expect identifier after $
             if self.match_token(TokenType::Identifier) {
-                let name = self.previous().lexeme.clone();
-                // Consume closing backtick
-                self.consume(
-                    TokenType::Backtick,
-                    "Expected closing backtick after escaped identifier",
-                )?;
-                Ok(AstNode::Identifier(name))
-            } else {
-                Err(FhirPathError::ParserError(
-                    "Expected identifier after opening backtick".to_string(),
-                ))
-            }
-        } else if self.match_token(TokenType::At) {
-            // Date/time literal - parse complex date/time patterns
-            let mut datetime_str = String::from("@");
-
-            // Parse date/time components: numbers, identifiers (like T), hyphens, colons, dots
-            while !self.is_at_end() {
-                let current_token = self.peek();
-                match current_token.token_type {
-                    TokenType::NumberLiteral => {
-                        self.advance();
-                        datetime_str.push_str(&self.previous().lexeme);
-                    }
-                    TokenType::Identifier => {
-                        // Handle identifiers in datetime literals
-                        let identifier = &current_token.lexeme;
-
-                        // Allow single-character identifiers like 'T'
-                        if identifier.len() == 1
-                            && identifier.chars().next().unwrap().is_alphabetic()
-                        {
-                            self.advance();
-                            datetime_str.push_str(&self.previous().lexeme);
-                        }
-                        // Allow identifiers that start with 'T' followed by digits (like T14, T14:30)
-                        else if identifier.starts_with('T') && identifier.len() > 1 {
-                            // Check if the rest are digits
-                            let rest = &identifier[1..];
-                            if rest.chars().all(|c| c.is_ascii_digit()) {
-                                self.advance();
-                                datetime_str.push_str(&self.previous().lexeme);
-                            } else {
-                                break; // End of date/time literal - this looks like a method call
-                            }
-                        } else {
-                            break; // End of date/time literal - this looks like a method call
-                        }
-                    }
-                    TokenType::Minus => {
-                        self.advance();
-                        datetime_str.push('-');
-                    }
-                    TokenType::Plus => {
-                        self.advance();
-                        datetime_str.push('+');
-                    }
-                    TokenType::Dot => {
-                        // Check if this is part of a decimal seconds (e.g., @T14:30:45.123)
-                        // Look ahead to see if the next token is a number
-                        if self.current + 1 < self.tokens.len() {
-                            let next_token = &self.tokens[self.current + 1];
-                            if next_token.token_type == TokenType::NumberLiteral {
-                                self.advance();
-                                datetime_str.push('.');
-                            } else {
-                                break; // End of date/time literal - this dot is for method chaining
-                            }
-                        } else {
-                            break; // End of tokens
-                        }
-                    }
+                let identifier = self.previous().lexeme.clone();
+                match identifier.as_str() {
+                    "this" => Ok(AstNode::Identifier("$this".to_string())),
+                    "index" => Ok(AstNode::Identifier("$index".to_string())),
+                    "total" => Ok(AstNode::Identifier("$total".to_string())),
                     _ => {
-                        // Check for colon character (not a standard token type, but might be lexed as something else)
-                        if current_token.lexeme == ":" {
-                            self.advance();
-                            datetime_str.push(':');
-                        } else {
-                            break; // End of date/time literal
-                        }
+                        // Regular context variable
+                        let var_name = format!("${}", identifier);
+                        Ok(AstNode::Identifier(var_name))
                     }
                 }
-            }
-
-            // Ensure we parsed something after @
-            if datetime_str.len() == 1 {
-                Err(FhirPathError::ParserError(
-                    "Expected date/time value after @".to_string(),
-                ))
-            } else {
-                Ok(AstNode::DateTimeLiteral(datetime_str))
-            }
-        } else if self.match_token(TokenType::Dollar) {
-            // Context variable - expect identifier after $
-            if self.match_token(TokenType::Identifier) {
-                let var_name = format!("${}", self.previous().lexeme);
-                Ok(AstNode::Identifier(var_name))
             } else {
                 Err(FhirPathError::ParserError(
                     "Expected variable name after $".to_string(),
                 ))
             }
         } else if self.match_token(TokenType::Percent) {
-            // Variable reference - expect identifier after %
+            // Variable reference - expect identifier or delimited identifier after %
             if self.match_token(TokenType::Identifier) {
+                let var_name = self.previous().lexeme.clone();
+                Ok(AstNode::Variable(var_name))
+            } else if self.match_token(TokenType::DelimitedIdentifier) {
                 let var_name = self.previous().lexeme.clone();
                 Ok(AstNode::Variable(var_name))
             } else {

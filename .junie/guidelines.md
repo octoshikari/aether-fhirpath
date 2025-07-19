@@ -60,6 +60,8 @@ aether-fhirpath/
 - Rust 1.70+ (latest stable recommended)
 - Node.js 20+ (for Node.js bindings development)
 - Git
+- Pnpm as package manager for js/ts packages
+- For js/ts/ packages use Biome linter/formatter instrad of Eslint and Prettier
 
 ### Setup
 

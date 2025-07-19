@@ -12,14 +12,20 @@ use std::str::Chars;
 pub enum TokenType {
     // Literals
     Identifier,
+    DelimitedIdentifier,
     StringLiteral,
     NumberLiteral,
     BooleanLiteral,
+    DateLiteral,
+    DateTimeLiteral,
+    TimeLiteral,
 
     // Operators
     Dot,            // .
     Equal,          // =
     NotEqual,       // !=
+    Equivalent,     // ~
+    NotEquivalent,  // !~
     LessThan,       // <
     LessOrEqual,    // <=
     GreaterThan,    // >
@@ -28,6 +34,8 @@ pub enum TokenType {
     Minus,          // -
     Multiply,       // *
     Divide,         // /
+    Div,            // div
+    Ampersand,      // &
 
     // Delimiters
     LeftParen,    // (
@@ -48,12 +56,15 @@ pub enum TokenType {
     Percent,   // %
 
     // Keywords
-    And,     // and
-    Or,      // or
-    Xor,     // xor
-    Implies, // implies
-    In,      // in
-    Mod,     // mod
+    And,      // and
+    Or,       // or
+    Xor,      // xor
+    Implies,  // implies
+    In,       // in
+    Contains, // contains
+    Mod,      // mod
+    Is,       // is
+    As,       // as
 
     // End of input
     EOF,
@@ -98,9 +109,33 @@ impl<'a> Lexer<'a> {
         keywords.insert("xor".to_string(), TokenType::Xor);
         keywords.insert("implies".to_string(), TokenType::Implies);
         keywords.insert("in".to_string(), TokenType::In);
+        keywords.insert("contains".to_string(), TokenType::Contains);
         keywords.insert("mod".to_string(), TokenType::Mod);
+        keywords.insert("div".to_string(), TokenType::Div);
+        keywords.insert("is".to_string(), TokenType::Is);
+        keywords.insert("as".to_string(), TokenType::As);
         keywords.insert("true".to_string(), TokenType::BooleanLiteral);
         keywords.insert("false".to_string(), TokenType::BooleanLiteral);
+
+        // Date/time precision units (singular)
+        keywords.insert("year".to_string(), TokenType::Identifier);
+        keywords.insert("month".to_string(), TokenType::Identifier);
+        keywords.insert("week".to_string(), TokenType::Identifier);
+        keywords.insert("day".to_string(), TokenType::Identifier);
+        keywords.insert("hour".to_string(), TokenType::Identifier);
+        keywords.insert("minute".to_string(), TokenType::Identifier);
+        keywords.insert("second".to_string(), TokenType::Identifier);
+        keywords.insert("millisecond".to_string(), TokenType::Identifier);
+
+        // Date/time precision units (plural)
+        keywords.insert("years".to_string(), TokenType::Identifier);
+        keywords.insert("months".to_string(), TokenType::Identifier);
+        keywords.insert("weeks".to_string(), TokenType::Identifier);
+        keywords.insert("days".to_string(), TokenType::Identifier);
+        keywords.insert("hours".to_string(), TokenType::Identifier);
+        keywords.insert("minutes".to_string(), TokenType::Identifier);
+        keywords.insert("seconds".to_string(), TokenType::Identifier);
+        keywords.insert("milliseconds".to_string(), TokenType::Identifier);
 
         Lexer {
             input,
@@ -148,6 +183,40 @@ impl<'a> Lexer<'a> {
     fn skip_whitespace(&mut self) {
         while let Some(&c) = self.peek() {
             if !c.is_whitespace() {
+                break;
+            }
+            self.advance();
+        }
+    }
+
+    /// Skips a block comment /* ... */
+    fn skip_block_comment(&mut self) -> Result<(), FhirPathError> {
+        let start_line = self.line;
+        let start_column = self.column;
+
+        while let Some(&c) = self.peek() {
+            if c == '*' {
+                self.advance();
+                if let Some(&'/') = self.peek() {
+                    self.advance(); // consume '/'
+                    return Ok(());
+                }
+            } else {
+                self.advance();
+            }
+        }
+
+        // If we get here, the comment wasn't terminated
+        Err(FhirPathError::LexerError(format!(
+            "Unterminated block comment starting at line {}, column {}",
+            start_line, start_column
+        )))
+    }
+
+    /// Skips a line comment // ...
+    fn skip_line_comment(&mut self) {
+        while let Some(&c) = self.peek() {
+            if c == '\n' || c == '\r' {
                 break;
             }
             self.advance();
@@ -263,7 +332,7 @@ impl<'a> Lexer<'a> {
                 // Skip the closing quote
                 self.advance();
 
-                // Check for escaped quote
+                // Check for escaped quote (double single quotes)
                 if let Some(&next) = self.peek() {
                     if next == '\'' {
                         // It's an escaped quote, include it and continue
@@ -281,6 +350,87 @@ impl<'a> Lexer<'a> {
                     line: start_line,
                     column: start_column,
                 });
+            } else if c == '\\' {
+                // Handle backslash escape sequences
+                self.advance();
+                if let Some(&escaped) = self.peek() {
+                    match escaped {
+                        '\'' => {
+                            string.push('\'');
+                            self.advance();
+                        }
+                        '"' => {
+                            string.push('"');
+                            self.advance();
+                        }
+                        '\\' => {
+                            string.push('\\');
+                            self.advance();
+                        }
+                        '/' => {
+                            string.push('/');
+                            self.advance();
+                        }
+                        'f' => {
+                            string.push('\x0C'); // Form feed
+                            self.advance();
+                        }
+                        'n' => {
+                            string.push('\n');
+                            self.advance();
+                        }
+                        'r' => {
+                            string.push('\r');
+                            self.advance();
+                        }
+                        't' => {
+                            string.push('\t');
+                            self.advance();
+                        }
+                        'u' => {
+                            // Unicode escape sequence \uXXXX
+                            self.advance();
+                            let mut unicode_value = 0u32;
+                            for _ in 0..4 {
+                                if let Some(&hex_char) = self.peek() {
+                                    if hex_char.is_ascii_hexdigit() {
+                                        unicode_value = unicode_value * 16 + hex_char.to_digit(16).unwrap();
+                                        self.advance();
+                                    } else {
+                                        return Err(FhirPathError::LexerError(format!(
+                                            "Invalid unicode escape sequence at line {}, column {}",
+                                            self.line, self.column
+                                        )));
+                                    }
+                                } else {
+                                    return Err(FhirPathError::LexerError(format!(
+                                        "Incomplete unicode escape sequence at line {}, column {}",
+                                        self.line, self.column
+                                    )));
+                                }
+                            }
+                            if let Some(unicode_char) = char::from_u32(unicode_value) {
+                                string.push(unicode_char);
+                            } else {
+                                return Err(FhirPathError::LexerError(format!(
+                                    "Invalid unicode value in escape sequence at line {}, column {}",
+                                    self.line, self.column
+                                )));
+                            }
+                        }
+                        _ => {
+                            return Err(FhirPathError::LexerError(format!(
+                                "Invalid escape sequence '\\{}' at line {}, column {}",
+                                escaped, self.line, self.column
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(FhirPathError::LexerError(format!(
+                        "Incomplete escape sequence at line {}, column {}",
+                        self.line, self.column
+                    )));
+                }
             } else if c == '\n' {
                 return Err(FhirPathError::LexerError(format!(
                     "Unterminated string literal at line {}",
@@ -297,6 +447,361 @@ impl<'a> Lexer<'a> {
             "Unterminated string literal at line {}, column {}",
             start_line, start_column
         )))
+    }
+
+    /// Scans a delimited identifier (backtick-enclosed)
+    fn delimited_identifier(&mut self) -> Result<Token, FhirPathError> {
+        let start_line = self.line;
+        let start_column = self.column;
+
+        // Consume opening backtick
+        self.advance();
+
+        let mut value = String::new();
+
+        while let Some(&c) = self.peek() {
+            if c == '`' {
+                // Consume closing backtick
+                self.advance();
+                return Ok(self.make_token(TokenType::DelimitedIdentifier, value));
+            } else if c == '\\' {
+                // Handle escape sequences
+                self.advance();
+                if let Some(&escaped) = self.peek() {
+                    match escaped {
+                        '`' | '\\' | '/' | 'f' | 'n' | 'r' | 't' => {
+                            value.push('\\');
+                            value.push(escaped);
+                            self.advance();
+                        }
+                        'u' => {
+                            // Unicode escape sequence
+                            value.push('\\');
+                            value.push('u');
+                            self.advance();
+                            // Read 4 hex digits
+                            for _ in 0..4 {
+                                if let Some(&hex_char) = self.peek() {
+                                    if hex_char.is_ascii_hexdigit() {
+                                        value.push(hex_char);
+                                        self.advance();
+                                    } else {
+                                        return Err(FhirPathError::LexerError(format!(
+                                            "Invalid unicode escape sequence at line {}, column {}",
+                                            self.line, self.column
+                                        )));
+                                    }
+                                } else {
+                                    return Err(FhirPathError::LexerError(format!(
+                                        "Incomplete unicode escape sequence at line {}, column {}",
+                                        self.line, self.column
+                                    )));
+                                }
+                            }
+                        }
+                        _ => {
+                            return Err(FhirPathError::LexerError(format!(
+                                "Invalid escape sequence '\\{}' at line {}, column {}",
+                                escaped, self.line, self.column
+                            )));
+                        }
+                    }
+                } else {
+                    return Err(FhirPathError::LexerError(format!(
+                        "Incomplete escape sequence at line {}, column {}",
+                        self.line, self.column
+                    )));
+                }
+            } else {
+                value.push(c);
+                self.advance();
+            }
+        }
+
+        // If we get here, the delimited identifier wasn't terminated
+        Err(FhirPathError::LexerError(format!(
+            "Unterminated delimited identifier at line {}, column {}",
+            start_line, start_column
+        )))
+    }
+
+    /// Scans a date/time literal starting with @
+    fn date_time_literal(&mut self) -> Result<Token, FhirPathError> {
+        let start_line = self.line;
+        let start_column = self.column;
+
+        // Consume @
+        self.advance();
+        let mut value = String::from("@");
+
+        // Check if this is a TIME literal (@T...)
+        if let Some(&'T') = self.peek() {
+            self.advance();
+            value.push('T');
+
+            // Parse time format: HH:MM:SS.fff
+            if let Some(time_part) = self.scan_time_format() {
+                value.push_str(&time_part);
+                return Ok(self.make_token(TokenType::TimeLiteral, value));
+            } else {
+                return Err(FhirPathError::LexerError(format!(
+                    "Invalid time format after @T at line {}, column {}",
+                    start_line, start_column
+                )));
+            }
+        }
+
+        // Parse date format: YYYY-MM-DD
+        if let Some(date_part) = self.scan_date_format() {
+            value.push_str(&date_part);
+
+            // Check if this continues as a datetime with T
+            if let Some(&'T') = self.peek() {
+                self.advance();
+                value.push('T');
+
+                // Parse optional time and timezone
+                if let Some(time_part) = self.scan_time_format() {
+                    value.push_str(&time_part);
+
+                    // Parse optional timezone
+                    if let Some(tz_part) = self.scan_timezone_format() {
+                        value.push_str(&tz_part);
+                    }
+                }
+
+                return Ok(self.make_token(TokenType::DateTimeLiteral, value));
+            } else {
+                return Ok(self.make_token(TokenType::DateLiteral, value));
+            }
+        }
+
+        Err(FhirPathError::LexerError(format!(
+            "Invalid date/time format after @ at line {}, column {}",
+            start_line, start_column
+        )))
+    }
+
+    /// Scans date format: YYYY-MM-DD
+    fn scan_date_format(&mut self) -> Option<String> {
+        let mut result = String::new();
+
+        // YYYY
+        for _ in 0..4 {
+            if let Some(&c) = self.peek() {
+                if c.is_ascii_digit() {
+                    result.push(c);
+                    self.advance();
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+
+        // Optional -MM-DD
+        if let Some(&'-') = self.peek() {
+            result.push('-');
+            self.advance();
+
+            // MM
+            for _ in 0..2 {
+                if let Some(&c) = self.peek() {
+                    if c.is_ascii_digit() {
+                        result.push(c);
+                        self.advance();
+                    } else {
+                        return Some(result);
+                    }
+                } else {
+                    return Some(result);
+                }
+            }
+
+            // Optional -DD
+            if let Some(&'-') = self.peek() {
+                result.push('-');
+                self.advance();
+
+                // DD
+                for _ in 0..2 {
+                    if let Some(&c) = self.peek() {
+                        if c.is_ascii_digit() {
+                            result.push(c);
+                            self.advance();
+                        } else {
+                            return Some(result);
+                        }
+                    } else {
+                        return Some(result);
+                    }
+                }
+            }
+        }
+
+        Some(result)
+    }
+
+    /// Scans time format: HH:MM:SS.fff
+    fn scan_time_format(&mut self) -> Option<String> {
+        let mut result = String::new();
+
+        // HH
+        for _ in 0..2 {
+            if let Some(&c) = self.peek() {
+                if c.is_ascii_digit() {
+                    result.push(c);
+                    self.advance();
+                } else {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+
+        // Optional :MM:SS.fff
+        if let Some(&':') = self.peek() {
+            result.push(':');
+            self.advance();
+
+            // MM
+            for _ in 0..2 {
+                if let Some(&c) = self.peek() {
+                    if c.is_ascii_digit() {
+                        result.push(c);
+                        self.advance();
+                    } else {
+                        return Some(result);
+                    }
+                } else {
+                    return Some(result);
+                }
+            }
+
+            // Optional :SS.fff
+            if let Some(&':') = self.peek() {
+                result.push(':');
+                self.advance();
+
+                // SS
+                for _ in 0..2 {
+                    if let Some(&c) = self.peek() {
+                        if c.is_ascii_digit() {
+                            result.push(c);
+                            self.advance();
+                        } else {
+                            return Some(result);
+                        }
+                    } else {
+                        return Some(result);
+                    }
+                }
+
+                // Optional .fff (only if followed by digits)
+                if let Some(&'.') = self.peek() {
+                    // Look ahead to see if there are digits after the dot
+                    let mut temp_pos = self.position + 1;
+                    let mut has_digits_after_dot = false;
+
+                    while temp_pos < self.input.len() {
+                        if let Some(c) = self.input.chars().nth(temp_pos) {
+                            if c.is_ascii_digit() {
+                                has_digits_after_dot = true;
+                                break;
+                            } else if c.is_whitespace() {
+                                temp_pos += 1;
+                                continue;
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Only consume the dot if it's followed by digits (milliseconds)
+                    if has_digits_after_dot {
+                        result.push('.');
+                        self.advance();
+
+                        // One or more digits
+                        let mut has_digits = false;
+                        while let Some(&c) = self.peek() {
+                            if c.is_ascii_digit() {
+                                result.push(c);
+                                self.advance();
+                                has_digits = true;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if !has_digits {
+                            return Some(result);
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(result)
+    }
+
+    /// Scans timezone format: Z or +HH:MM or -HH:MM
+    fn scan_timezone_format(&mut self) -> Option<String> {
+        if let Some(&c) = self.peek() {
+            match c {
+                'Z' => {
+                    self.advance();
+                    Some("Z".to_string())
+                }
+                '+' | '-' => {
+                    let mut result = String::new();
+                    result.push(c);
+                    self.advance();
+
+                    // HH
+                    for _ in 0..2 {
+                        if let Some(&digit) = self.peek() {
+                            if digit.is_ascii_digit() {
+                                result.push(digit);
+                                self.advance();
+                            } else {
+                                return None;
+                            }
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    // :MM
+                    if let Some(&':') = self.peek() {
+                        result.push(':');
+                        self.advance();
+
+                        for _ in 0..2 {
+                            if let Some(&digit) = self.peek() {
+                                if digit.is_ascii_digit() {
+                                    result.push(digit);
+                                    self.advance();
+                                } else {
+                                    return None;
+                                }
+                            } else {
+                                return None;
+                            }
+                        }
+                    }
+
+                    Some(result)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
     }
 
     /// Scans the next token
@@ -360,22 +865,30 @@ impl<'a> Lexer<'a> {
                 }
                 '/' => {
                     self.advance();
+                    // Check for comments
+                    if let Some(&next) = self.peek() {
+                        if next == '*' {
+                            // Block comment /* ... */
+                            self.advance(); // consume '*'
+                            self.skip_block_comment()?;
+                            return self.scan_token(); // Recursively scan next token
+                        } else if next == '/' {
+                            // Line comment // ...
+                            self.advance(); // consume second '/'
+                            self.skip_line_comment();
+                            return self.scan_token(); // Recursively scan next token
+                        }
+                    }
                     Ok(self.make_token(TokenType::Divide, "/".to_string()))
                 }
 
                 // Special characters
-                '`' => {
-                    self.advance();
-                    Ok(self.make_token(TokenType::Backtick, "`".to_string()))
-                }
+                '`' => self.delimited_identifier(),
                 '$' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Dollar, "$".to_string()))
                 }
-                '@' => {
-                    self.advance();
-                    Ok(self.make_token(TokenType::At, "@".to_string()))
-                }
+                '@' => self.date_time_literal(),
                 '\\' => {
                     self.advance();
                     Ok(self.make_token(TokenType::Backslash, "\\".to_string()))
@@ -386,7 +899,7 @@ impl<'a> Lexer<'a> {
                 }
                 '&' => {
                     self.advance();
-                    Ok(self.make_token(TokenType::And, "&".to_string()))
+                    Ok(self.make_token(TokenType::Ampersand, "&".to_string()))
                 }
 
                 // Two-character tokens
@@ -400,6 +913,9 @@ impl<'a> Lexer<'a> {
                         if next == '=' {
                             self.advance();
                             return Ok(self.make_token(TokenType::NotEqual, "!=".to_string()));
+                        } else if next == '~' {
+                            self.advance();
+                            return Ok(self.make_token(TokenType::NotEquivalent, "!~".to_string()));
                         }
                     }
                     Err(FhirPathError::LexerError(format!(
@@ -427,6 +943,10 @@ impl<'a> Lexer<'a> {
                         }
                     }
                     Ok(self.make_token(TokenType::GreaterThan, ">".to_string()))
+                }
+                '~' => {
+                    self.advance();
+                    Ok(self.make_token(TokenType::Equivalent, "~".to_string()))
                 }
 
                 // String literals
